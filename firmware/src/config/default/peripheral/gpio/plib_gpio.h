@@ -141,6 +141,30 @@
 #define LED_MODE2_OutputEnable()      (TRISACLR = (1<<0))
 #define LED_MODE2_InputEnable()       (TRISASET = (1<<0))
 #define LED_MODE2_PIN                  GPIO_PIN_RA0
+/*** Macros for CHG_FULLCHG_N pin ***/
+#define CHG_FULLCHG_N_Set()               (LATBSET = (1<<8))
+#define CHG_FULLCHG_N_Clear()             (LATBCLR = (1<<8))
+#define CHG_FULLCHG_N_Toggle()            (LATBINV= (1<<8))
+#define CHG_FULLCHG_N_Get()               ((PORTB >> 8) & 0x1)
+#define CHG_FULLCHG_N_OutputEnable()      (TRISBCLR = (1<<8))
+#define CHG_FULLCHG_N_InputEnable()       (TRISBSET = (1<<8))
+#define CHG_FULLCHG_N_PIN                  GPIO_PIN_RB8
+/*** Macros for CHG_FASTCHG_N pin ***/
+#define CHG_FASTCHG_N_Set()               (LATBSET = (1<<9))
+#define CHG_FASTCHG_N_Clear()             (LATBCLR = (1<<9))
+#define CHG_FASTCHG_N_Toggle()            (LATBINV= (1<<9))
+#define CHG_FASTCHG_N_Get()               ((PORTB >> 9) & 0x1)
+#define CHG_FASTCHG_N_OutputEnable()      (TRISBCLR = (1<<9))
+#define CHG_FASTCHG_N_InputEnable()       (TRISBSET = (1<<9))
+#define CHG_FASTCHG_N_PIN                  GPIO_PIN_RB9
+/*** Macros for CHG_FAULT_N pin ***/
+#define CHG_FAULT_N_Set()               (LATBSET = (1<<10))
+#define CHG_FAULT_N_Clear()             (LATBCLR = (1<<10))
+#define CHG_FAULT_N_Toggle()            (LATBINV= (1<<10))
+#define CHG_FAULT_N_Get()               ((PORTB >> 10) & 0x1)
+#define CHG_FAULT_N_OutputEnable()      (TRISBCLR = (1<<10))
+#define CHG_FAULT_N_InputEnable()       (TRISBSET = (1<<10))
+#define CHG_FAULT_N_PIN                  GPIO_PIN_RB10
 /*** Macros for AMP_CLIP_N pin ***/
 #define AMP_CLIP_N_Set()               (LATFSET = (1<<8))
 #define AMP_CLIP_N_Clear()             (LATFCLR = (1<<8))
@@ -221,6 +245,14 @@
 #define DSP_EMO1_OutputEnable()      (TRISDCLR = (1<<0))
 #define DSP_EMO1_InputEnable()       (TRISDSET = (1<<0))
 #define DSP_EMO1_PIN                  GPIO_PIN_RD0
+/*** Macros for AUX_DETECT pin ***/
+#define AUX_DETECT_Set()               (LATCSET = (1<<14))
+#define AUX_DETECT_Clear()             (LATCCLR = (1<<14))
+#define AUX_DETECT_Toggle()            (LATCINV= (1<<14))
+#define AUX_DETECT_Get()               ((PORTC >> 14) & 0x1)
+#define AUX_DETECT_OutputEnable()      (TRISCCLR = (1<<14))
+#define AUX_DETECT_InputEnable()       (TRISCSET = (1<<14))
+#define AUX_DETECT_PIN                  GPIO_PIN_RC14
 /*** Macros for BM_RST_N pin ***/
 #define BM_RST_N_Set()               (LATDSET = (1<<13))
 #define BM_RST_N_Clear()             (LATDCLR = (1<<13))
