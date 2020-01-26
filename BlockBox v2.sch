@@ -23132,12 +23132,6 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <part name="TP308" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
 <attribute name="TP_SIGNAL_NAME" value="SD"/>
 </part>
-<part name="TP309" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
-<attribute name="TP_SIGNAL_NAME" value="AMP_DVDD"/>
-</part>
-<part name="TP310" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
-<attribute name="TP_SIGNAL_NAME" value="AMP_AVDD"/>
-</part>
 <part name="TP311" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
 <attribute name="TP_SIGNAL_NAME" value="OUT_A"/>
 </part>
@@ -23226,10 +23220,10 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <part name="TP324" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
 <attribute name="TP_SIGNAL_NAME" value="AMP_!FAULT"/>
 </part>
-<part name="TP325" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
+<part name="TP309" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
 <attribute name="TP_SIGNAL_NAME" value="!OTW"/>
 </part>
-<part name="TP326" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
+<part name="TP310" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
 <attribute name="TP_SIGNAL_NAME" value="!CLIP"/>
 </part>
 <part name="TP408" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
@@ -26043,12 +26037,6 @@ Range ~= 36.5V to 58V</text>
 <instance part="TP308" gate="G$1" x="-167.64" y="35.56" smashed="yes">
 <attribute name="NAME" x="-168.91" y="36.83" size="1.778" layer="95"/>
 </instance>
-<instance part="TP309" gate="G$1" x="55.88" y="58.42" smashed="yes" rot="R270">
-<attribute name="NAME" x="57.15" y="59.69" size="1.778" layer="95" rot="R270"/>
-</instance>
-<instance part="TP310" gate="G$1" x="66.04" y="55.88" smashed="yes">
-<attribute name="NAME" x="64.77" y="57.15" size="1.778" layer="95"/>
-</instance>
 <instance part="TP311" gate="G$1" x="157.48" y="93.98" smashed="yes">
 <attribute name="NAME" x="156.21" y="95.25" size="1.778" layer="95"/>
 </instance>
@@ -26103,10 +26091,10 @@ Range ~= 36.5V to 58V</text>
 <instance part="TP324" gate="G$1" x="25.4" y="48.26" smashed="yes">
 <attribute name="NAME" x="24.13" y="49.53" size="1.778" layer="95"/>
 </instance>
-<instance part="TP325" gate="G$1" x="27.94" y="45.72" smashed="yes">
+<instance part="TP309" gate="G$1" x="27.94" y="45.72" smashed="yes">
 <attribute name="NAME" x="26.67" y="46.99" size="1.778" layer="95"/>
 </instance>
-<instance part="TP326" gate="G$1" x="30.48" y="43.18" smashed="yes">
+<instance part="TP310" gate="G$1" x="30.48" y="43.18" smashed="yes">
 <attribute name="NAME" x="29.21" y="44.45" size="1.778" layer="95"/>
 </instance>
 <instance part="C344" gate="G$1" x="-22.86" y="25.4" smashed="yes">
@@ -26705,25 +26693,19 @@ Range ~= 36.5V to 58V</text>
 <pinref part="C327" gate="G$1" pin="1"/>
 <pinref part="U301" gate="G$1" pin="AVDD"/>
 <wire x1="60.96" y1="27.94" x2="60.96" y2="53.34" width="0.1524" layer="91"/>
-<wire x1="60.96" y1="53.34" x2="66.04" y2="53.34" width="0.1524" layer="91"/>
-<pinref part="TP310" gate="G$1" pin="TP"/>
-<wire x1="66.04" y1="53.34" x2="83.82" y2="53.34" width="0.1524" layer="91"/>
-<junction x="66.04" y="53.34"/>
+<wire x1="60.96" y1="53.34" x2="83.82" y2="53.34" width="0.1524" layer="91"/>
 </segment>
 </net>
 <net name="AMP_DVDD" class="0">
 <segment>
 <pinref part="C326" gate="G$1" pin="1"/>
 <pinref part="U301" gate="G$1" pin="DVDD"/>
-<wire x1="53.34" y1="27.94" x2="53.34" y2="58.42" width="0.1524" layer="91"/>
-<wire x1="53.34" y1="58.42" x2="53.34" y2="60.96" width="0.1524" layer="91"/>
+<wire x1="53.34" y1="27.94" x2="53.34" y2="60.96" width="0.1524" layer="91"/>
 <wire x1="53.34" y1="60.96" x2="53.34" y2="66.04" width="0.1524" layer="91"/>
 <wire x1="53.34" y1="66.04" x2="83.82" y2="66.04" width="0.1524" layer="91"/>
 <wire x1="53.34" y1="60.96" x2="55.88" y2="60.96" width="0.1524" layer="91"/>
 <junction x="53.34" y="60.96"/>
 <label x="55.88" y="60.96" size="1.778" layer="95"/>
-<pinref part="TP309" gate="G$1" pin="TP"/>
-<junction x="53.34" y="58.42"/>
 </segment>
 <segment>
 <pinref part="SJ301" gate="G$1" pin="1"/>
@@ -26807,7 +26789,7 @@ Range ~= 36.5V to 58V</text>
 <pinref part="U301" gate="G$1" pin="!OTW"/>
 <wire x1="83.82" y1="43.18" x2="27.94" y2="43.18" width="0.1524" layer="91"/>
 <label x="-43.18" y="43.18" size="1.778" layer="95"/>
-<pinref part="TP325" gate="G$1" pin="TP"/>
+<pinref part="TP309" gate="G$1" pin="TP"/>
 <wire x1="27.94" y1="43.18" x2="-27.94" y2="43.18" width="0.1524" layer="91"/>
 <junction x="27.94" y="43.18"/>
 </segment>
@@ -26817,7 +26799,7 @@ Range ~= 36.5V to 58V</text>
 <pinref part="U301" gate="G$1" pin="!CLIP"/>
 <wire x1="83.82" y1="40.64" x2="30.48" y2="40.64" width="0.1524" layer="91"/>
 <label x="-43.18" y="40.64" size="1.778" layer="95"/>
-<pinref part="TP326" gate="G$1" pin="TP"/>
+<pinref part="TP310" gate="G$1" pin="TP"/>
 <wire x1="30.48" y1="40.64" x2="-27.94" y2="40.64" width="0.1524" layer="91"/>
 <junction x="30.48" y="40.64"/>
 </segment>
