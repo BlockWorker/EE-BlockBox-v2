@@ -23186,6 +23186,15 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <part name="C404" library="rcl" library_urn="urn:adsk.eagle:library:334" deviceset="C-EU" device="C0603" package3d_urn="urn:adsk.eagle:package:23616/2" value="0.1µF"/>
 <part name="R413" library="resistor" library_urn="urn:adsk.eagle:library:348" deviceset="R-US_" device="R0603" package3d_urn="urn:adsk.eagle:package:23555/3" value="1kΩ"/>
 <part name="R414" library="resistor" library_urn="urn:adsk.eagle:library:348" deviceset="R-US_" device="R0603" package3d_urn="urn:adsk.eagle:package:23555/3" value="1kΩ"/>
+<part name="TP107" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
+<attribute name="TP_SIGNAL_NAME" value="BAT-"/>
+</part>
+<part name="TP108" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
+<attribute name="TP_SIGNAL_NAME" value="BAT-"/>
+</part>
+<part name="TP109" library="testpad" library_urn="urn:adsk.eagle:library:385" deviceset="TP" device="TP15R" package3d_urn="urn:adsk.eagle:package:27968/1">
+<attribute name="TP_SIGNAL_NAME" value="BAT-"/>
+</part>
 </parts>
 <sheets>
 <sheet>
@@ -23566,6 +23575,15 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <instance part="TP106" gate="G$1" x="5.08" y="63.5" smashed="yes">
 <attribute name="NAME" x="3.81" y="64.77" size="1.778" layer="95"/>
 </instance>
+<instance part="TP107" gate="G$1" x="223.52" y="7.62" smashed="yes">
+<attribute name="NAME" x="219.71" y="8.89" size="1.778" layer="95"/>
+</instance>
+<instance part="TP108" gate="G$1" x="231.14" y="7.62" smashed="yes">
+<attribute name="NAME" x="229.87" y="8.89" size="1.778" layer="95"/>
+</instance>
+<instance part="TP109" gate="G$1" x="241.3" y="7.62" smashed="yes">
+<attribute name="NAME" x="240.03" y="8.89" size="1.778" layer="95"/>
+</instance>
 </instances>
 <busses>
 </busses>
@@ -23875,7 +23893,16 @@ new: Attribute TP_SIGNAL_NAME&lt;br&gt;
 <label x="218.44" y="0" size="1.778" layer="95"/>
 <pinref part="D102" gate="G$1" pin="A"/>
 <wire x1="248.92" y1="25.4" x2="248.92" y2="5.08" width="0.1524" layer="91"/>
-<wire x1="248.92" y1="5.08" x2="218.44" y2="5.08" width="0.1524" layer="91"/>
+<wire x1="248.92" y1="5.08" x2="241.3" y2="5.08" width="0.1524" layer="91"/>
+<pinref part="TP107" gate="G$1" pin="TP"/>
+<wire x1="241.3" y1="5.08" x2="231.14" y2="5.08" width="0.1524" layer="91"/>
+<wire x1="231.14" y1="5.08" x2="223.52" y2="5.08" width="0.1524" layer="91"/>
+<wire x1="223.52" y1="5.08" x2="218.44" y2="5.08" width="0.1524" layer="91"/>
+<junction x="223.52" y="5.08"/>
+<pinref part="TP108" gate="G$1" pin="TP"/>
+<junction x="231.14" y="5.08"/>
+<pinref part="TP109" gate="G$1" pin="TP"/>
+<junction x="241.3" y="5.08"/>
 </segment>
 <segment>
 <pinref part="U101" gate="G$1" pin="PGND"/>
