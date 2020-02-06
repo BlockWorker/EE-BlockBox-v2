@@ -3,7 +3,7 @@
 <eagle version="9.5.2">
 <drawing>
 <settings>
-<setting alwaysvectorfont="no"/>
+<setting alwaysvectorfont="yes"/>
 <setting verticaltext="up"/>
 </settings>
 <grid distance="1" unitdist="mil" unit="mil" style="lines" multiple="1" display="no" altdistance="5" altunitdist="mil" altunit="mil"/>
@@ -301,6 +301,7 @@ blockworker.de</text>
 <wire x1="65.2526" y1="74.3204" x2="67.183" y2="72.39" width="0.8128" layer="29"/>
 <wire x1="80.7466" y1="60.8076" x2="80.7466" y2="59.7662" width="0.8128" layer="29"/>
 <wire x1="78.0288" y1="53.7464" x2="79.3496" y2="55.0672" width="0.8128" layer="29"/>
+<text x="77.8764" y="27.432" size="1.016" layer="21" font="vector" ratio="15">JLCJLCJLCJLC</text>
 </plain>
 <libraries>
 <library name="BW-Active">
@@ -9152,7 +9153,7 @@ Source:  Data sheet </description>
 <wire x1="40.8686" y1="101.3714" x2="40.7924" y2="101.4476" width="0.254" layer="1"/>
 <wire x1="40.8686" y1="101.3714" x2="41.1988" y2="101.3714" width="0.254" layer="1"/>
 <wire x1="40.7924" y1="105.3694" x2="40.7924" y2="101.4476" width="0.254" layer="1"/>
-<polygon width="0.1524" layer="16" isolate="0.3048">
+<polygon width="0.1524" layer="16">
 <vertex x="40.7162" y="101.5492"/>
 <vertex x="40.7162" y="100.6348"/>
 <vertex x="48.44515" y="100.6348" curve="45"/>
