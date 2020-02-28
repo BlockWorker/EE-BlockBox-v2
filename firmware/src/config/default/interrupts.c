@@ -65,7 +65,7 @@ void I2C1_MASTER_InterruptHandler( void );
 void DMA0_InterruptHandler( void );
 void DMA1_InterruptHandler( void );
 void DMA2_InterruptHandler( void );
-void DMA4_InterruptHandler( void );
+void DMA3_InterruptHandler( void );
 void SPI2_RX_InterruptHandler( void );
 void SPI2_TX_InterruptHandler( void );
 void UART2_FAULT_InterruptHandler( void );
@@ -108,9 +108,9 @@ void DMA2_Handler (void)
     DMA2_InterruptHandler();
 }
 
-void DMA4_Handler (void)
+void DMA3_Handler (void)
 {
-    DMA4_InterruptHandler();
+    DMA3_InterruptHandler();
 }
 
 void SPI2_RX_Handler (void)

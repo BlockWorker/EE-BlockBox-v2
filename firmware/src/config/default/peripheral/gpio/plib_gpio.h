@@ -269,14 +269,14 @@
 #define BM_MFB_OutputEnable()      (TRISFCLR = (1<<0))
 #define BM_MFB_InputEnable()       (TRISFSET = (1<<0))
 #define BM_MFB_PIN                  GPIO_PIN_RF0
-/*** Macros for CTL_VOL- pin ***/
-#define CTL_VOL-_Set()               (LATESET = (1<<1))
-#define CTL_VOL-_Clear()             (LATECLR = (1<<1))
-#define CTL_VOL-_Toggle()            (LATEINV= (1<<1))
-#define CTL_VOL-_Get()               ((PORTE >> 1) & 0x1)
-#define CTL_VOL-_OutputEnable()      (TRISECLR = (1<<1))
-#define CTL_VOL-_InputEnable()       (TRISESET = (1<<1))
-#define CTL_VOL-_PIN                  GPIO_PIN_RE1
+/*** Macros for CTL_VOL_DOWN pin ***/
+#define CTL_VOL_DOWN_Set()               (LATESET = (1<<1))
+#define CTL_VOL_DOWN_Clear()             (LATECLR = (1<<1))
+#define CTL_VOL_DOWN_Toggle()            (LATEINV= (1<<1))
+#define CTL_VOL_DOWN_Get()               ((PORTE >> 1) & 0x1)
+#define CTL_VOL_DOWN_OutputEnable()      (TRISECLR = (1<<1))
+#define CTL_VOL_DOWN_InputEnable()       (TRISESET = (1<<1))
+#define CTL_VOL_DOWN_PIN                  GPIO_PIN_RE1
 /*** Macros for CTL_MFB pin ***/
 #define CTL_MFB_Set()               (LATGSET = (1<<14))
 #define CTL_MFB_Clear()             (LATGCLR = (1<<14))
@@ -285,14 +285,14 @@
 #define CTL_MFB_OutputEnable()      (TRISGCLR = (1<<14))
 #define CTL_MFB_InputEnable()       (TRISGSET = (1<<14))
 #define CTL_MFB_PIN                  GPIO_PIN_RG14
-/*** Macros for CTL_VOL+ pin ***/
-#define CTL_VOL+_Set()               (LATGSET = (1<<12))
-#define CTL_VOL+_Clear()             (LATGCLR = (1<<12))
-#define CTL_VOL+_Toggle()            (LATGINV= (1<<12))
-#define CTL_VOL+_Get()               ((PORTG >> 12) & 0x1)
-#define CTL_VOL+_OutputEnable()      (TRISGCLR = (1<<12))
-#define CTL_VOL+_InputEnable()       (TRISGSET = (1<<12))
-#define CTL_VOL+_PIN                  GPIO_PIN_RG12
+/*** Macros for CTL_VOL_UP pin ***/
+#define CTL_VOL_UP_Set()               (LATGSET = (1<<12))
+#define CTL_VOL_UP_Clear()             (LATGCLR = (1<<12))
+#define CTL_VOL_UP_Toggle()            (LATGINV= (1<<12))
+#define CTL_VOL_UP_Get()               ((PORTG >> 12) & 0x1)
+#define CTL_VOL_UP_OutputEnable()      (TRISGCLR = (1<<12))
+#define CTL_VOL_UP_InputEnable()       (TRISGSET = (1<<12))
+#define CTL_VOL_UP_PIN                  GPIO_PIN_RG12
 /*** Macros for CTL_BACK pin ***/
 #define CTL_BACK_Set()               (LATGSET = (1<<13))
 #define CTL_BACK_Clear()             (LATGCLR = (1<<13))

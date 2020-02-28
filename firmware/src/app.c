@@ -89,7 +89,7 @@ APP_DATA appData;
 void APP_Initialize ( void )
 {
     /* Place the App state machine in its initial state. */
-    appData.state = APP_STATE_INIT;
+    appData.state = APP_STATE_INIT_BM83;
 
 
 
@@ -113,9 +113,23 @@ void APP_Tasks ( void )
     /* Check the application's current state. */
     switch ( appData.state )
     {
-        /* Application's initial state. */
-        case APP_STATE_INIT:
+        case APP_STATE_INIT_I2S:
         {
+            
+            break;
+        }
+        
+        case APP_STATE_INIT_UI:
+        {
+            
+            break;
+        }
+        
+        case APP_STATE_INIT_BM83:
+        {
+            
+            
+            
             bool appInitialized = true;
 
 
@@ -124,6 +138,12 @@ void APP_Tasks ( void )
 
                 appData.state = APP_STATE_SERVICE_TASKS;
             }
+            break;
+        }
+        
+        case APP_STATE_INIT_DAP:
+        {
+            
             break;
         }
 

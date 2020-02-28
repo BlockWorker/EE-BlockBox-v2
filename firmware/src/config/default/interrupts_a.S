@@ -160,24 +160,24 @@ IntVectorDMA2_Handler:
     nop
     portRESTORE_CONTEXT
     .end   IntVectorDMA2_Handler
-    .extern  DMA4_Handler
+    .extern  DMA3_Handler
 
-    .section   .vector_138,code, keep
-    .equ     __vector_dispatch_138, IntVectorDMA4_Handler
-    .global  __vector_dispatch_138
+    .section   .vector_137,code, keep
+    .equ     __vector_dispatch_137, IntVectorDMA3_Handler
+    .global  __vector_dispatch_137
     .set     nomicromips
     .set     noreorder
     .set     nomips16
     .set     noat
-    .ent  IntVectorDMA4_Handler
+    .ent  IntVectorDMA3_Handler
 
-IntVectorDMA4_Handler:
+IntVectorDMA3_Handler:
     portSAVE_CONTEXT
-    la    s6,  DMA4_Handler
+    la    s6,  DMA3_Handler
     jalr  s6
     nop
     portRESTORE_CONTEXT
-    .end   IntVectorDMA4_Handler
+    .end   IntVectorDMA3_Handler
     .extern  SPI2_RX_Handler
 
     .section   .vector_143,code, keep

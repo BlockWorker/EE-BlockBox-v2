@@ -3,3 +3,4 @@
 *.b#*
 *.d#*
 /BM83 stuff/
+**/build/

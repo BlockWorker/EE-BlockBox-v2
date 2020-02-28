@@ -74,9 +74,9 @@ extern "C" {
 /*  The following data type definitions are used by the functions in this
     interface and should be considered part it.
 */
-#define CHANNEL_1 (1U)
-#define CHANNEL_2 (2U)
-#define CHANNEL_4 (4U)
+#define AN_BAT_SENSE (1U)
+#define AN_CURR_SENSE (2U)
+#define AD_LED_POT (4U)
 // *****************************************************************************
 // *****************************************************************************
 // Section: Interface Routines

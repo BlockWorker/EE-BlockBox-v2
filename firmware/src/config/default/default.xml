@@ -126,6 +126,9 @@
               <Value dnOrder="0">true</Value>
             </Boolean>
           </Attributes>
+          <Values dnOrder="1">
+            <User dnOrder="0" value="AN_BAT_SENSE"/>
+          </Values>
         </String>
         <Boolean dnOrder="16" id="ADCHS_2_ENABLE">
           <Values dnOrder="0">
@@ -138,6 +141,9 @@
               <Value dnOrder="0">true</Value>
             </Boolean>
           </Attributes>
+          <Values dnOrder="1">
+            <User dnOrder="0" value="AN_CURR_SENSE"/>
+          </Values>
         </String>
         <Boolean dnOrder="18" id="ADCHS_4_ENABLE">
           <Values dnOrder="0">
@@ -150,6 +156,9 @@
               <Value dnOrder="0">true</Value>
             </Boolean>
           </Attributes>
+          <Values dnOrder="1">
+            <User dnOrder="0" value="AD_LED_POT"/>
+          </Values>
         </String>
         <Hex dnOrder="20" id="ADCHS_ADCCON3">
           <Values dnOrder="0">
@@ -377,16 +386,6 @@
             </Boolean>
           </Attributes>
         </KeyValueSet>
-        <Boolean dnOrder="55" id="AN1">
-          <Values dnOrder="0">
-            <User dnOrder="0" value="false"/>
-          </Values>
-        </Boolean>
-        <Boolean dnOrder="56" id="AN4">
-          <Values dnOrder="0">
-            <User dnOrder="0" value="false"/>
-          </Values>
-        </Boolean>
       </Symbols>
     </UniqueComponent>
     <UniqueComponent dnOrder="1" id="core">
@@ -1353,7 +1352,7 @@
         </String>
         <String dnOrder="192" id="BSP_PIN_94_FUNCTION_NAME">
           <Values dnOrder="0">
-            <User dnOrder="0" value="CTL_VOL-"/>
+            <User dnOrder="0" value="CTL_VOL_DOWN"/>
           </Values>
         </String>
         <String dnOrder="193" id="BSP_PIN_94_FUNCTION_TYPE">
@@ -1393,7 +1392,7 @@
         </String>
         <String dnOrder="200" id="BSP_PIN_96_FUNCTION_NAME">
           <Values dnOrder="0">
-            <User dnOrder="0" value="CTL_VOL+"/>
+            <User dnOrder="0" value="CTL_VOL_UP"/>
           </Values>
         </String>
         <String dnOrder="201" id="BSP_PIN_96_FUNCTION_TYPE">
@@ -1720,12 +1719,12 @@
         </Hex>
         <Integer dnOrder="265" id="DCH3_ECON_SIRQEN_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="0"/>
+            <Dynamic dnOrder="0" id="core" value="1"/>
           </Values>
         </Integer>
         <Hex dnOrder="266" id="DCH3_ECON_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="0"/>
+            <Dynamic dnOrder="0" id="core" value="37392"/>
           </Values>
         </Hex>
         <String dnOrder="267" id="DCH4_CON_CHPRI_VALUE">
@@ -1810,42 +1809,42 @@
         </Boolean>
         <Boolean dnOrder="283" id="DMA3_INTERRUPT_ENABLE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="false"/>
+            <Dynamic dnOrder="0" id="core" value="true"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="284" id="DMA3_INTERRUPT_ENABLE_UPDATE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="true"/>
+            <Dynamic dnOrder="0" id="core" value="false"/>
           </Values>
         </Boolean>
         <String dnOrder="285" id="DMA3_INTERRUPT_HANDLER">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="DMA3_Handler"/>
+            <Dynamic dnOrder="0" id="core" value="DMA3_InterruptHandler"/>
           </Values>
         </String>
         <Boolean dnOrder="286" id="DMA3_INTERRUPT_HANDLER_LOCK">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="false"/>
+            <Dynamic dnOrder="0" id="core" value="true"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="287" id="DMA4_INTERRUPT_ENABLE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="true"/>
+            <Dynamic dnOrder="0" id="core" value="false"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="288" id="DMA4_INTERRUPT_ENABLE_UPDATE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="false"/>
+            <Dynamic dnOrder="0" id="core" value="true"/>
           </Values>
         </Boolean>
         <String dnOrder="289" id="DMA4_INTERRUPT_HANDLER">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="DMA4_InterruptHandler"/>
+            <Dynamic dnOrder="0" id="core" value="DMA4_Handler"/>
           </Values>
         </String>
         <Boolean dnOrder="290" id="DMA4_INTERRUPT_HANDLER_LOCK">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="true"/>
+            <Dynamic dnOrder="0" id="core" value="false"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="291" id="DMAC_CHAN0_ENBL">
@@ -1866,12 +1865,12 @@
         <Boolean dnOrder="294" id="DMAC_CHAN3_ENBL">
           <Values dnOrder="0">
             <Dynamic dnOrder="0" id="core" value="true"/>
-            <User dnOrder="1" value="false"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="295" id="DMAC_CHAN4_ENBL">
           <Values dnOrder="0">
             <Dynamic dnOrder="0" id="core" value="true"/>
+            <User dnOrder="1" value="false"/>
           </Values>
         </Boolean>
         <Integer dnOrder="296" id="DMAC_CLOCK_FREQUENCY">
@@ -1888,7 +1887,7 @@
         </File>
         <Integer dnOrder="298" id="DMAC_HIGHEST_CHANNEL">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="5"/>
+            <Dynamic dnOrder="0" id="core" value="4"/>
           </Values>
         </Integer>
         <Boolean dnOrder="299" id="DMAC_REQUEST_0_PERID_LOCK">
@@ -1944,12 +1943,11 @@
         <Combo dnOrder="309" id="DMAC_REQUEST_3_SOURCE">
           <Values dnOrder="0">
             <Dynamic dnOrder="0" id="core" value="UART2_RX"/>
-            <User dnOrder="1" value="Software Trigger"/>
           </Values>
         </Combo>
         <Integer dnOrder="310" id="DMAC_REQUEST_3_SOURCE_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="0"/>
+            <Dynamic dnOrder="0" id="core" value="146"/>
           </Values>
         </Integer>
         <Boolean dnOrder="311" id="DMAC_REQUEST_4_PERID_LOCK">
@@ -2190,32 +2188,32 @@
         </String>
         <Boolean dnOrder="357" id="EVIC_137_ENABLE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="false"/>
+            <Dynamic dnOrder="0" id="core" value="true"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="358" id="EVIC_137_HANDLER_LOCK">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="false"/>
+            <Dynamic dnOrder="0" id="core" value="true"/>
           </Values>
         </Boolean>
         <String dnOrder="359" id="EVIC_137_INTERRUPT_HANDLER">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="DMA3_Handler"/>
+            <Dynamic dnOrder="0" id="core" value="DMA3_InterruptHandler"/>
           </Values>
         </String>
         <Boolean dnOrder="360" id="EVIC_138_ENABLE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="true"/>
+            <Dynamic dnOrder="0" id="core" value="false"/>
           </Values>
         </Boolean>
         <Boolean dnOrder="361" id="EVIC_138_HANDLER_LOCK">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="true"/>
+            <Dynamic dnOrder="0" id="core" value="false"/>
           </Values>
         </Boolean>
         <String dnOrder="362" id="EVIC_138_INTERRUPT_HANDLER">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="core" value="DMA4_InterruptHandler"/>
+            <Dynamic dnOrder="0" id="core" value="DMA4_Handler"/>
           </Values>
         </String>
         <Boolean dnOrder="363" id="EVIC_143_ENABLE">
@@ -4344,8 +4342,7 @@
     </UniqueComponent>
   </Components>
   <UserData>
-    <GraphSettings canvasHeight="400" canvasWidth="400" dnOrder="0"/>
-    <ComponentGraph dnOrder="1" id="__ROOTVIEW">
+    <ComponentGraph dnOrder="0" id="__ROOTVIEW">
       <ElementPositions dnOrder="0">
         <ElementPosition dnOrder="0" id="FreeRTOS" x="484" y="17"/>
         <ElementPosition dnOrder="1" id="HarmonyCore" x="622" y="10"/>
@@ -4358,7 +4355,7 @@
         <ElementPosition dnOrder="8" id="i2c1" x="453" y="451"/>
         <ElementPosition dnOrder="9" id="nvm" x="49" y="371"/>
         <ElementPosition dnOrder="10" id="ocmp2" x="36" y="68"/>
-        <ElementPosition dnOrder="11" id="ocmp5" x="38" y="112"/>
+        <ElementPosition dnOrder="11" id="ocmp5" x="38" y="113"/>
         <ElementPosition dnOrder="12" id="ocmp6" x="39" y="156"/>
         <ElementPosition dnOrder="13" id="ocmp7" x="186" y="74"/>
         <ElementPosition dnOrder="14" id="ocmp9" x="188" y="114"/>
@@ -4367,5 +4364,6 @@
         <ElementPosition dnOrder="17" id="uart2" x="421" y="239"/>
       </ElementPositions>
     </ComponentGraph>
+    <GraphSettings canvasHeight="400" canvasWidth="400" dnOrder="1"/>
   </UserData>
 </Configuration>
