@@ -59,14 +59,14 @@
 #include "peripheral/ocmp/plib_ocmp2.h"
 #include "driver/i2c/drv_i2c.h"
 #include "peripheral/nvm/plib_nvm.h"
+#include "system/time/sys_time.h"
 #include "peripheral/i2c/plib_i2c1.h"
 #include "peripheral/adchs/plib_adchs.h"
 #include "peripheral/uart/plib_uart2.h"
 #include "driver/usart/drv_usart.h"
 #include "peripheral/tmr/plib_tmr2.h"
+#include "peripheral/tmr/plib_tmr3.h"
 #include "peripheral/spi/plib_spi2.h"
-#include "FreeRTOS.h"
-#include "task.h"
 #include "driver/spi/drv_spi.h"
 #include "system/int/sys_int.h"
 #include "system/ports/sys_ports.h"
@@ -200,6 +200,7 @@ typedef struct
     /* SPI0 Driver Object */
     SYS_MODULE_OBJ drvSPI0;
 
+    SYS_MODULE_OBJ  sysTime;
     SYS_MODULE_OBJ  drvUsart0;
 
 } SYSTEM_OBJECTS;

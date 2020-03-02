@@ -64,6 +64,7 @@
             <logicalFolder name="f10" displayName="tmr" projectFiles="true">
               <itemPath>../src/config/default/peripheral/tmr/plib_tmr_common.h</itemPath>
               <itemPath>../src/config/default/peripheral/tmr/plib_tmr2.h</itemPath>
+              <itemPath>../src/config/default/peripheral/tmr/plib_tmr3.h</itemPath>
             </logicalFolder>
             <logicalFolder name="f9" displayName="uart" projectFiles="true">
               <itemPath>../src/config/default/peripheral/uart/plib_uart_common.h</itemPath>
@@ -71,17 +72,22 @@
             </logicalFolder>
           </logicalFolder>
           <logicalFolder name="f3" displayName="system" projectFiles="true">
-            <logicalFolder name="f3" displayName="dma" projectFiles="true">
+            <logicalFolder name="f4" displayName="dma" projectFiles="true">
               <itemPath>../src/config/default/system/dma/sys_dma.h</itemPath>
               <itemPath>../src/config/default/system/dma/sys_dma_mapping.h</itemPath>
             </logicalFolder>
-            <logicalFolder name="f1" displayName="int" projectFiles="true">
+            <logicalFolder name="f2" displayName="int" projectFiles="true">
               <itemPath>../src/config/default/system/int/sys_int.h</itemPath>
               <itemPath>../src/config/default/system/int/sys_int_mapping.h</itemPath>
             </logicalFolder>
-            <logicalFolder name="f2" displayName="ports" projectFiles="true">
+            <logicalFolder name="f3" displayName="ports" projectFiles="true">
               <itemPath>../src/config/default/system/ports/sys_ports.h</itemPath>
               <itemPath>../src/config/default/system/ports/sys_ports_mapping.h</itemPath>
+            </logicalFolder>
+            <logicalFolder name="f1" displayName="time" projectFiles="true">
+              <itemPath>../src/config/default/system/time/sys_time.h</itemPath>
+              <itemPath>../src/config/default/system/time/sys_time_definitions.h</itemPath>
+              <itemPath>../src/config/default/system/time/src/sys_time_local.h</itemPath>
             </logicalFolder>
             <itemPath>../src/config/default/system/system.h</itemPath>
             <itemPath>../src/config/default/system/system_common.h</itemPath>
@@ -89,48 +95,20 @@
           </logicalFolder>
           <itemPath>../src/config/default/toolchain_specifics.h</itemPath>
           <itemPath>../src/config/default/definitions.h</itemPath>
-          <itemPath>../src/config/default/FreeRTOSConfig.h</itemPath>
           <itemPath>../src/config/default/user.h</itemPath>
           <itemPath>../src/config/default/configuration.h</itemPath>
         </logicalFolder>
       </logicalFolder>
-      <logicalFolder name="f3" displayName="FreeRTOS" projectFiles="true">
-        <logicalFolder name="f1" displayName="Source" projectFiles="true">
-          <logicalFolder name="f1" displayName="include" projectFiles="true">
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/croutine.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/event_groups.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/FreeRTOS.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/list.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/mpu_wrappers.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/portable.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/projdefs.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/queue.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/semphr.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/stack_macros.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/deprecated_definitions.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/task.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/timers.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/mpu_prototypes.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/stream_buffer.h</itemPath>
-            <itemPath>../src/third_party/rtos/FreeRTOS/Source/include/message_buffer.h</itemPath>
-          </logicalFolder>
-          <logicalFolder name="f2" displayName="portable" projectFiles="true">
-            <logicalFolder name="f1" displayName="MPLAB" projectFiles="true">
-              <logicalFolder name="f1" displayName="PIC32MZ" projectFiles="true">
-                <itemPath>../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ/portmacro.h</itemPath>
-                <itemPath>../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ/ISR_Support.h</itemPath>
-              </logicalFolder>
-            </logicalFolder>
-          </logicalFolder>
-        </logicalFolder>
+      <logicalFolder name="f4" displayName="dap" projectFiles="true">
+        <itemPath>../src/dap.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f6" displayName="I2S" projectFiles="true">
         <itemPath>../src/i2s.h</itemPath>
       </logicalFolder>
-      <logicalFolder name="f4" displayName="osal" projectFiles="true">
+      <logicalFolder name="f3" displayName="osal" projectFiles="true">
         <itemPath>../src/config/default/osal/osal.h</itemPath>
         <itemPath>../src/config/default/osal/osal_definitions.h</itemPath>
-        <itemPath>../src/config/default/osal/osal_freertos.h</itemPath>
+        <itemPath>../src/config/default/osal/osal_impl_basic.h</itemPath>
       </logicalFolder>
       <logicalFolder name="f2" displayName="packs" projectFiles="true">
         <logicalFolder name="f1"
@@ -138,6 +116,10 @@
                        projectFiles="true">
           <itemPath>../src/packs/PIC32MZ2048EFH100_DFP/device.h</itemPath>
         </logicalFolder>
+      </logicalFolder>
+      <logicalFolder name="f7" displayName="UI" projectFiles="true">
+        <itemPath>../src/ui.h</itemPath>
+        <itemPath>../src/char_lcd.h</itemPath>
       </logicalFolder>
       <itemPath>../src/app.h</itemPath>
     </logicalFolder>
@@ -201,6 +183,7 @@
             </logicalFolder>
             <logicalFolder name="f10" displayName="tmr" projectFiles="true">
               <itemPath>../src/config/default/peripheral/tmr/plib_tmr2.c</itemPath>
+              <itemPath>../src/config/default/peripheral/tmr/plib_tmr3.c</itemPath>
             </logicalFolder>
             <logicalFolder name="f9" displayName="uart" projectFiles="true">
               <itemPath>../src/config/default/peripheral/uart/plib_uart2.c</itemPath>
@@ -210,48 +193,32 @@
             <itemPath>../src/config/default/stdio/xc32_monitor.c</itemPath>
           </logicalFolder>
           <logicalFolder name="f4" displayName="system" projectFiles="true">
-            <logicalFolder name="f2" displayName="dma" projectFiles="true">
+            <logicalFolder name="f3" displayName="dma" projectFiles="true">
               <itemPath>../src/config/default/system/dma/sys_dma.c</itemPath>
             </logicalFolder>
-            <logicalFolder name="f1" displayName="int" projectFiles="true">
+            <logicalFolder name="f2" displayName="int" projectFiles="true">
               <itemPath>../src/config/default/system/int/src/sys_int.c</itemPath>
+            </logicalFolder>
+            <logicalFolder name="f1" displayName="time" projectFiles="true">
+              <itemPath>../src/config/default/system/time/src/sys_time.c</itemPath>
             </logicalFolder>
           </logicalFolder>
           <itemPath>../src/config/default/initialization.c</itemPath>
           <itemPath>../src/config/default/interrupts.c</itemPath>
-          <itemPath>../src/config/default/interrupts_a.S</itemPath>
           <itemPath>../src/config/default/exceptions.c</itemPath>
-          <itemPath>../src/config/default/freertos_hooks.c</itemPath>
           <itemPath>../src/config/default/tasks.c</itemPath>
         </logicalFolder>
       </logicalFolder>
-      <logicalFolder name="f2" displayName="FreeRTOS" projectFiles="true">
-        <logicalFolder name="f1" displayName="Source" projectFiles="true">
-          <logicalFolder name="f1" displayName="portable" projectFiles="true">
-            <logicalFolder name="f1" displayName="MemMang" projectFiles="true">
-              <itemPath>../src/third_party/rtos/FreeRTOS/Source/portable/MemMang/heap_1.c</itemPath>
-            </logicalFolder>
-            <logicalFolder name="f2" displayName="MPLAB" projectFiles="true">
-              <logicalFolder name="f1" displayName="PIC32MZ" projectFiles="true">
-                <itemPath>../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ/port.c</itemPath>
-                <itemPath>../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ/port_asm.S</itemPath>
-              </logicalFolder>
-            </logicalFolder>
-          </logicalFolder>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/croutine.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/list.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/queue.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/FreeRTOS_tasks.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/timers.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/event_groups.c</itemPath>
-          <itemPath>../src/third_party/rtos/FreeRTOS/Source/stream_buffer.c</itemPath>
-        </logicalFolder>
+      <logicalFolder name="f2" displayName="dap" projectFiles="true">
+        <itemPath>../src/dap.c</itemPath>
       </logicalFolder>
       <logicalFolder name="f5" displayName="I2S" projectFiles="true">
         <itemPath>../src/i2s.c</itemPath>
       </logicalFolder>
-      <logicalFolder name="f3" displayName="osal" projectFiles="true">
-        <itemPath>../src/config/default/osal/osal_freertos.c</itemPath>
+      <logicalFolder name="f3" displayName="UI" projectFiles="true">
+        <itemPath>../src/ui_touch.c</itemPath>
+        <itemPath>../src/ui_button.c</itemPath>
+        <itemPath>../src/char_lcd.c</itemPath>
       </logicalFolder>
       <itemPath>../src/main.c</itemPath>
       <itemPath>../src/app.c</itemPath>
@@ -314,12 +281,12 @@
         <property key="enable-unroll-loops" value="false"/>
         <property key="exclude-floating-point" value="false"/>
         <property key="extra-include-directories"
-                  value="../src;../src/config/default;../src/packs/PIC32MZ2048EFH100_DFP;../src/mips;../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ;../src/third_party/rtos/FreeRTOS/Source/include"/>
+                  value="../src;../src/config/default;../src/packs/PIC32MZ2048EFH100_DFP;;../src/mips"/>
         <property key="generate-16-bit-code" value="false"/>
         <property key="generate-micro-compressed-code" value="false"/>
         <property key="isolate-each-function" value="true"/>
         <property key="make-warnings-into-errors" value="true"/>
-        <property key="optimization-level" value="-O2"/>
+        <property key="optimization-level" value=""/>
         <property key="place-data-into-section" value="false"/>
         <property key="post-instruction-scheduling" value="default"/>
         <property key="pre-instruction-scheduling" value="default"/>
@@ -341,10 +308,8 @@
         <property key="enable-symbols" value="true"/>
         <property key="exclude-floating-point-library" value="false"/>
         <property key="expand-macros" value="false"/>
-        <property key="extra-include-directories-for-assembler"
-                  value="../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ;../src/third_party/rtos/FreeRTOS/Source/include;../src/config/default"/>
-        <property key="extra-include-directories-for-preprocessor"
-                  value="../src/third_party/rtos/FreeRTOS/Source/portable/MPLAB/PIC32MZ;../src/third_party/rtos/FreeRTOS/Source/include;../src/config/default"/>
+        <property key="extra-include-directories-for-assembler" value=""/>
+        <property key="extra-include-directories-for-preprocessor" value=""/>
         <property key="false-conditionals" value="false"/>
         <property key="generate-16-bit-code" value="false"/>
         <property key="generate-micro-compressed-code" value="false"/>
@@ -417,7 +382,7 @@
         <property key="generate-micro-compressed-code" value="false"/>
         <property key="isolate-each-function" value="true"/>
         <property key="make-warnings-into-errors" value="false"/>
-        <property key="optimization-level" value="-O2"/>
+        <property key="optimization-level" value=""/>
         <property key="place-data-into-section" value="false"/>
         <property key="post-instruction-scheduling" value="default"/>
         <property key="pre-instruction-scheduling" value="default"/>
@@ -638,6 +603,8 @@
         <property key="memories.programmemory" value="true"/>
         <property key="memories.programmemory.ranges" value="1d000000-1d1fffff"/>
         <property key="poweroptions.powerenable" value="false"/>
+        <property key="programmerToGoFilePath"
+                  value="E:/Users/Alex/Documents/eagle/projects/BlockBox v2/firmware/BlockBox v2.X/debug/default/BlockBox v2_ptg"/>
         <property key="programmerToGoImageName" value="BlockBox v2_ptg"/>
         <property key="programoptions.donoteraseauxmem" value="false"/>
         <property key="programoptions.eraseb4program" value="true"/>

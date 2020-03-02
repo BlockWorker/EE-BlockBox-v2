@@ -102,8 +102,8 @@
 #pragma config FETHIO =     ON
 #pragma config PGL1WAY =    ON
 #pragma config PMDL1WAY =   ON
-#pragma config IOL1WAY =    ON
-#pragma config FUSBIDIO =   ON
+#pragma config IOL1WAY =    OFF
+#pragma config FUSBIDIO =   OFF
 
 /*** BF1SEQ0 ***/
 
@@ -373,6 +373,23 @@ SYSTEM_OBJECTS sysObj;
 // Section: System Initialization
 // *****************************************************************************
 // *****************************************************************************
+// <editor-fold defaultstate="collapsed" desc="SYS_TIME Initialization Data">
+
+const SYS_TIME_PLIB_INTERFACE sysTimePlibAPI = {
+    .timerCallbackSet = (SYS_TIME_PLIB_CALLBACK_REGISTER)TMR3_CallbackRegister,
+    .timerStart = (SYS_TIME_PLIB_START)TMR3_Start,
+    .timerStop = (SYS_TIME_PLIB_STOP)TMR3_Stop ,
+    .timerFrequencyGet = (SYS_TIME_PLIB_FREQUENCY_GET)TMR3_FrequencyGet,
+    .timerPeriodSet = (SYS_TIME_PLIB_PERIOD_SET)TMR3_PeriodSet,
+};
+
+const SYS_TIME_INIT sysTimeInitData =
+{
+    .timePlib = &sysTimePlibAPI,
+    .hwTimerIntNum = 14,
+};
+
+// </editor-fold>
 
 
 
@@ -393,12 +410,15 @@ void SYS_Initialize ( void* data )
 
   
     CLK_Initialize();
-	GPIO_Initialize();
+    
     /* Configure Prefetch, Wait States and ECC */
     PRECONbits.PREFEN = 3;
     PRECONbits.PFMWS = 2;
     CFGCONbits.ECCCON = 3;
 
+
+
+	GPIO_Initialize();
 
     OCMP9_Initialize();
 
@@ -412,6 +432,8 @@ void SYS_Initialize ( void* data )
 
     OCMP2_Initialize();
 
+    NVM_Initialize();
+
     I2C1_Initialize();
 
     ADCHS_Initialize();
@@ -419,6 +441,8 @@ void SYS_Initialize ( void* data )
 	UART2_Initialize();
 
     TMR2_Initialize();
+
+    TMR3_Initialize();
 
 	SPI2_Initialize();
 
@@ -430,6 +454,7 @@ void SYS_Initialize ( void* data )
     sysObj.drvUsart0 = DRV_USART_Initialize(DRV_USART_INDEX_0, (SYS_MODULE_INIT *)&drvUsart0InitData);
 
 
+    sysObj.sysTime = SYS_TIME_Initialize(SYS_TIME_INDEX_0, (SYS_MODULE_INIT *)&sysTimeInitData);
 
 
     APP_Initialize();

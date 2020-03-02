@@ -51,6 +51,7 @@
 
 #include "configuration.h"
 #include "definitions.h"
+#include "ui.h"
 
 // *****************************************************************************
 // *****************************************************************************
@@ -60,8 +61,11 @@
 
 
 void TIMER_2_InterruptHandler( void );
+void TIMER_3_InterruptHandler( void );
 void I2C1_BUS_InterruptHandler( void );
 void I2C1_MASTER_InterruptHandler( void );
+void CHANGE_NOTICE_E_InterruptHandler( void );
+void CHANGE_NOTICE_G_InterruptHandler( void );
 void DMA0_InterruptHandler( void );
 void DMA1_InterruptHandler( void );
 void DMA2_InterruptHandler( void );
@@ -76,69 +80,89 @@ void NVM_InterruptHandler( void );
 
 
 /* All the handlers are defined here.  Each will call its PLIB-specific function. */
-
-
-void TIMER_2_Handler (void)
+void __ISR(_TIMER_2_VECTOR, ipl1AUTO) TIMER_2_Handler (void)
 {
     TIMER_2_InterruptHandler();
 }
 
-void I2C1_BUS_Handler (void)
+void __ISR(_TIMER_3_VECTOR, ipl1AUTO) TIMER_3_Handler (void)
+{
+    TIMER_3_InterruptHandler();
+}
+
+void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
+{
+#ifdef UI_TOUCH
+    UI_InterruptHandler();
+#endif
+}
+
+void __ISR(_I2C1_BUS_VECTOR, ipl1AUTO) I2C1_BUS_Handler (void)
 {
     I2C1_BUS_InterruptHandler();
 }
 
-void I2C1_MASTER_Handler (void)
+void __ISR(_I2C1_MASTER_VECTOR, ipl1AUTO) I2C1_MASTER_Handler (void)
 {
     I2C1_MASTER_InterruptHandler();
 }
 
-void DMA0_Handler (void)
+void __ISR(_CHANGE_NOTICE_E_VECTOR, ipl1AUTO) CHANGE_NOTICE_E_Handler (void)
+{
+    CHANGE_NOTICE_E_InterruptHandler();
+}
+
+void __ISR(_CHANGE_NOTICE_G_VECTOR, ipl1AUTO) CHANGE_NOTICE_G_Handler (void)
+{
+    CHANGE_NOTICE_G_InterruptHandler();
+}
+
+void __ISR(_DMA0_VECTOR, ipl1AUTO) DMA0_Handler (void)
 {
     DMA0_InterruptHandler();
 }
 
-void DMA1_Handler (void)
+void __ISR(_DMA1_VECTOR, ipl1AUTO) DMA1_Handler (void)
 {
     DMA1_InterruptHandler();
 }
 
-void DMA2_Handler (void)
+void __ISR(_DMA2_VECTOR, ipl1AUTO) DMA2_Handler (void)
 {
     DMA2_InterruptHandler();
 }
 
-void DMA3_Handler (void)
+void __ISR(_DMA3_VECTOR, ipl1AUTO) DMA3_Handler (void)
 {
     DMA3_InterruptHandler();
 }
 
-void SPI2_RX_Handler (void)
+void __ISR(_SPI2_RX_VECTOR, ipl1AUTO) SPI2_RX_Handler (void)
 {
     SPI2_RX_InterruptHandler();
 }
 
-void SPI2_TX_Handler (void)
+void __ISR(_SPI2_TX_VECTOR, ipl1AUTO) SPI2_TX_Handler (void)
 {
     SPI2_TX_InterruptHandler();
 }
 
-void UART2_FAULT_Handler (void)
+void __ISR(_UART2_FAULT_VECTOR, ipl1AUTO) UART2_FAULT_Handler (void)
 {
     UART2_FAULT_InterruptHandler();
 }
 
-void UART2_RX_Handler (void)
+void __ISR(_UART2_RX_VECTOR, ipl1AUTO) UART2_RX_Handler (void)
 {
     UART2_RX_InterruptHandler();
 }
 
-void UART2_TX_Handler (void)
+void __ISR(_UART2_TX_VECTOR, ipl1AUTO) UART2_TX_Handler (void)
 {
     UART2_TX_InterruptHandler();
 }
 
-void FLASH_CONTROL_Handler (void)
+void __ISR(_FLASH_CONTROL_VECTOR, ipl1AUTO) FLASH_CONTROL_Handler (void)
 {
     NVM_InterruptHandler();
 }

@@ -1,5 +1,5 @@
 /* ************************************************************************** */
-
+#ifndef UI_TOUCH
 
 /* ************************************************************************** */
 /* ************************************************************************** */
@@ -7,7 +7,7 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#include "bm83.h"
+#include "ui.h"
 #include "app.h"
 
 
@@ -18,7 +18,7 @@
 /* ************************************************************************** */
 
 
-DRV_HANDLE drv;
+
 
 
 /* ************************************************************************** */
@@ -27,9 +27,8 @@ DRV_HANDLE drv;
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferHandle, uintptr_t context) {
-    
-}
+
+
 
 
 /* ************************************************************************** */
@@ -38,17 +37,41 @@ void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferH
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-
-void BM83_IO_Init() {
-    drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_USART_BufferEventHandlerSet(drv, onBufferEvent, 0);
+void UI_IO_Init() {
+    SPI2CON = 0;
+    SPI2CONbits.DISSDI = 1;
+    SPI2CONbits.DISSDO = 1; //disable SPI module and pins
+    SYS_INT_SourceDisable(INT_SOURCE_EXTERNAL_4); //disable ext interrupt
+    
+    SYSKEY = 0x00000000;
+    SYSKEY = 0xAA996655;
+    SYSKEY = 0x556699AA;
+    CFGCONbits.IOLOCK = 0; //unlock PPS
+    RPC2R = 0; //disable SS2 output
+    RPG8R = 0; //disable SDO2 output
+    SYSKEY = 0x00000000;
+    SYSKEY = 0xAA996655;
+    SYSKEY = 0x556699AA;
+    CFGCONbits.IOLOCK = 1; //lock PPS
+    
+    CNPDAbits.CNPDA5 = 0; //disable A5 pulldown
+    TRISAbits.TRISA5 = 0; //make A5 an output
+    TRISCCLR = 0b11110; //make C1-4 outputs
+    TRISECLR = 0b11100000; //make E5-7 outputs
+    TRISGCLR = 0b111000000; //make G6-8 outputs
+    LATGbits.LATG8 = 1; //set G8 high (LCD enable)
 }
 
-void BM83_Module_Init() {
+void UI_Main_Init() {
+    
+}
+
+void UI_InterruptHandler() {
     
 }
 
 
+#endif
 /* *****************************************************************************
  End of File
  */

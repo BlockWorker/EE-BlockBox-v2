@@ -32,8 +32,7 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include "configuration.h"
-#include "FreeRTOS.h"
-#include "task.h"
+#include "definitions.h"
 
 // DOM-IGNORE-BEGIN
 #ifdef __cplusplus  // Provide C++ Compatibility
@@ -63,8 +62,7 @@ extern "C" {
 typedef enum
 {
     /* Application's state machine's initial state. */
-    APP_STATE_INIT_I2S=0,
-    APP_STATE_INIT_UI,
+    APP_STATE_INIT_UI=0,
     APP_STATE_INIT_BM83,
     APP_STATE_INIT_DAP,
     APP_STATE_SERVICE_TASKS,

@@ -17,7 +17,7 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#define I2S_RECEIVE_BUFFER_LEN 1024
+#define I2S_RECEIVE_BUFFER_LEN 2048
 #define I2S_RECEIVE_BUFFER_PHYS_LOC 0x2000
 #define I2S_RECEIVE_BUFFER_VIRT_LOC I2S_RECEIVE_BUFFER_PHYS_LOC | 0x80000000
 
@@ -45,6 +45,8 @@ void I2S_Init() {
     IEC3bits.SPI1RXIE = 0;
     IEC3bits.SPI1TXIE = 0; //disable SPI interrupts
     IEC4bits.DMA4IE = 0; //disable DMA interrupt
+    
+    IFS3bits.SPI1RXIF = 0; //reset SPI receive interrupt flag
     
     SPI1CON = 0; //reset SPI config and disable SPI module
     SPI1CON2 = 0; //reset SPI config 2

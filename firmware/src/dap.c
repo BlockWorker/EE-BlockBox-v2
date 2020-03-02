@@ -7,7 +7,7 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#include "bm83.h"
+#include "dap.h"
 #include "app.h"
 
 
@@ -27,7 +27,7 @@ DRV_HANDLE drv;
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferHandle, uintptr_t context) {
+void onTransferEvent(DRV_I2C_TRANSFER_EVENT event, DRV_I2C_TRANSFER_HANDLE transferHandle, uintptr_t context) {
     
 }
 
@@ -38,13 +38,12 @@ void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferH
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-
-void BM83_IO_Init() {
-    drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_USART_BufferEventHandlerSet(drv, onBufferEvent, 0);
+void DAP_IO_Init() {
+    drv = DRV_I2C_Open(DRV_I2C_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
+    DRV_I2C_TransferEventHandlerSet(drv, onTransferEvent, 0);
 }
 
-void BM83_Module_Init() {
+void DAP_Chip_Init() {
     
 }
 

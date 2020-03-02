@@ -117,14 +117,6 @@
 #define LCD_PD_N_OutputEnable()      (TRISCCLR = (1<<3))
 #define LCD_PD_N_InputEnable()       (TRISCSET = (1<<3))
 #define LCD_PD_N_PIN                  GPIO_PIN_RC3
-/*** Macros for LCD_INT_N pin ***/
-#define LCD_INT_N_Set()               (LATCSET = (1<<4))
-#define LCD_INT_N_Clear()             (LATCCLR = (1<<4))
-#define LCD_INT_N_Toggle()            (LATCINV= (1<<4))
-#define LCD_INT_N_Get()               ((PORTC >> 4) & 0x1)
-#define LCD_INT_N_OutputEnable()      (TRISCCLR = (1<<4))
-#define LCD_INT_N_InputEnable()       (TRISCSET = (1<<4))
-#define LCD_INT_N_PIN                  GPIO_PIN_RC4
 /*** Macros for LED_MODE1 pin ***/
 #define LED_MODE1_Set()               (LATGSET = (1<<9))
 #define LED_MODE1_Clear()             (LATGCLR = (1<<9))
@@ -276,6 +268,8 @@
 #define CTL_VOL_DOWN_Get()               ((PORTE >> 1) & 0x1)
 #define CTL_VOL_DOWN_OutputEnable()      (TRISECLR = (1<<1))
 #define CTL_VOL_DOWN_InputEnable()       (TRISESET = (1<<1))
+#define CTL_VOL_DOWN_InterruptEnable()   (CNENESET = (1<<1))
+#define CTL_VOL_DOWN_InterruptDisable()  (CNENECLR = (1<<1))
 #define CTL_VOL_DOWN_PIN                  GPIO_PIN_RE1
 /*** Macros for CTL_MFB pin ***/
 #define CTL_MFB_Set()               (LATGSET = (1<<14))
@@ -284,6 +278,8 @@
 #define CTL_MFB_Get()               ((PORTG >> 14) & 0x1)
 #define CTL_MFB_OutputEnable()      (TRISGCLR = (1<<14))
 #define CTL_MFB_InputEnable()       (TRISGSET = (1<<14))
+#define CTL_MFB_InterruptEnable()   (CNENGSET = (1<<14))
+#define CTL_MFB_InterruptDisable()  (CNENGCLR = (1<<14))
 #define CTL_MFB_PIN                  GPIO_PIN_RG14
 /*** Macros for CTL_VOL_UP pin ***/
 #define CTL_VOL_UP_Set()               (LATGSET = (1<<12))
@@ -292,6 +288,8 @@
 #define CTL_VOL_UP_Get()               ((PORTG >> 12) & 0x1)
 #define CTL_VOL_UP_OutputEnable()      (TRISGCLR = (1<<12))
 #define CTL_VOL_UP_InputEnable()       (TRISGSET = (1<<12))
+#define CTL_VOL_UP_InterruptEnable()   (CNENGSET = (1<<12))
+#define CTL_VOL_UP_InterruptDisable()  (CNENGCLR = (1<<12))
 #define CTL_VOL_UP_PIN                  GPIO_PIN_RG12
 /*** Macros for CTL_BACK pin ***/
 #define CTL_BACK_Set()               (LATGSET = (1<<13))
@@ -300,6 +298,8 @@
 #define CTL_BACK_Get()               ((PORTG >> 13) & 0x1)
 #define CTL_BACK_OutputEnable()      (TRISGCLR = (1<<13))
 #define CTL_BACK_InputEnable()       (TRISGSET = (1<<13))
+#define CTL_BACK_InterruptEnable()   (CNENGSET = (1<<13))
+#define CTL_BACK_InterruptDisable()  (CNENGCLR = (1<<13))
 #define CTL_BACK_PIN                  GPIO_PIN_RG13
 /*** Macros for CTL_PLAY pin ***/
 #define CTL_PLAY_Set()               (LATESET = (1<<2))
@@ -308,6 +308,8 @@
 #define CTL_PLAY_Get()               ((PORTE >> 2) & 0x1)
 #define CTL_PLAY_OutputEnable()      (TRISECLR = (1<<2))
 #define CTL_PLAY_InputEnable()       (TRISESET = (1<<2))
+#define CTL_PLAY_InterruptEnable()   (CNENESET = (1<<2))
+#define CTL_PLAY_InterruptDisable()  (CNENECLR = (1<<2))
 #define CTL_PLAY_PIN                  GPIO_PIN_RE2
 /*** Macros for CTL_FWD pin ***/
 #define CTL_FWD_Set()               (LATESET = (1<<3))
@@ -316,6 +318,8 @@
 #define CTL_FWD_Get()               ((PORTE >> 3) & 0x1)
 #define CTL_FWD_OutputEnable()      (TRISECLR = (1<<3))
 #define CTL_FWD_InputEnable()       (TRISESET = (1<<3))
+#define CTL_FWD_InterruptEnable()   (CNENESET = (1<<3))
+#define CTL_FWD_InterruptDisable()  (CNENECLR = (1<<3))
 #define CTL_FWD_PIN                  GPIO_PIN_RE3
 /*** Macros for LCD_BL_SW pin ***/
 #define LCD_BL_SW_Set()               (LATESET = (1<<4))
@@ -459,6 +463,7 @@ typedef enum
 
 } GPIO_PIN;
 
+typedef  void (*GPIO_PIN_CALLBACK) ( GPIO_PIN pin, uintptr_t context);
 
 void GPIO_Initialize(void);
 
@@ -483,6 +488,29 @@ void GPIO_PortToggle(GPIO_PORT port, uint32_t mask);
 void GPIO_PortInputEnable(GPIO_PORT port, uint32_t mask);
 
 void GPIO_PortOutputEnable(GPIO_PORT port, uint32_t mask);
+
+void GPIO_PortInterruptEnable(GPIO_PORT port, uint32_t mask);
+
+void GPIO_PortInterruptDisable(GPIO_PORT port, uint32_t mask);
+
+// *****************************************************************************
+// *****************************************************************************
+// Section: Local Data types and Prototypes
+// *****************************************************************************
+// *****************************************************************************
+
+typedef struct {
+
+    /* target pin */
+    GPIO_PIN                 pin;
+
+    /* Callback for event on target pin*/
+    GPIO_PIN_CALLBACK        callback;
+
+    /* Callback Context */
+    uintptr_t               context;
+
+} GPIO_PIN_CALLBACK_OBJ;
 
 // *****************************************************************************
 // *****************************************************************************
@@ -530,6 +558,21 @@ static inline void GPIO_PinOutputEnable(GPIO_PIN pin)
     GPIO_PortOutputEnable(pin>>4, 0x1 << (pin & 0xF));
 }
 
+static inline void GPIO_PinInterruptEnable(GPIO_PIN pin)
+{
+    GPIO_PortInterruptEnable(pin>>4, 0x1 << (pin & 0xF));
+}
+
+static inline void GPIO_PinInterruptDisable(GPIO_PIN pin)
+{
+    GPIO_PortInterruptDisable(pin>>4, 0x1 << (pin & 0xF));
+}
+
+bool GPIO_PinInterruptCallbackRegister(
+    GPIO_PIN pin,
+    const   GPIO_PIN_CALLBACK callBack,
+    uintptr_t context
+);
 
 // DOM-IGNORE-BEGIN
 #ifdef __cplusplus  // Provide C++ Compatibility

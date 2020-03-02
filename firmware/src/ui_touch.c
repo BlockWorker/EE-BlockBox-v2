@@ -1,5 +1,8 @@
-/* ************************************************************************** */
 
+#include "driver/spi/drv_spi.h"
+
+/* ************************************************************************** */
+#ifdef UI_TOUCH
 
 /* ************************************************************************** */
 /* ************************************************************************** */
@@ -7,7 +10,7 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#include "bm83.h"
+#include "ui.h"
 #include "app.h"
 
 
@@ -17,8 +20,8 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-
 DRV_HANDLE drv;
+
 
 
 /* ************************************************************************** */
@@ -27,7 +30,7 @@ DRV_HANDLE drv;
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferHandle, uintptr_t context) {
+void onTransferEvent(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE transferHandle, uintptr_t context) {
     
 }
 
@@ -38,17 +41,21 @@ void onBufferEvent(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferH
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-
-void BM83_IO_Init() {
-    drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_USART_BufferEventHandlerSet(drv, onBufferEvent, 0);
+void UI_IO_Init() {
+    SPI2CONbits.FRMPOL = 0; //slave select active low
+    drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
+    DRV_SPI_TransferEventHandlerSet(drv, onTransferEvent, 0);
 }
 
-void BM83_Module_Init() {
+void UI_Main_Init() {
     
 }
 
+void UI_InterruptHandler() {
+    
+}
 
+#endif
 /* *****************************************************************************
  End of File
  */

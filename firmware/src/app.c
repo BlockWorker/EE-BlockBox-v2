@@ -28,6 +28,10 @@
 // *****************************************************************************
 
 #include "app.h"
+#include "i2s.h"
+#include "bm83.h"
+#include "dap.h"
+#include "ui.h"
 
 // *****************************************************************************
 // *****************************************************************************
@@ -89,9 +93,12 @@ APP_DATA appData;
 void APP_Initialize ( void )
 {
     /* Place the App state machine in its initial state. */
-    appData.state = APP_STATE_INIT_BM83;
+    appData.state = APP_STATE_INIT_UI;
 
-
+    UI_IO_Init();
+    I2S_Init();
+    BM83_IO_Init();
+    DAP_IO_Init();
 
     /* TODO: Initialize your application's state machine and other
      * parameters.
@@ -113,11 +120,6 @@ void APP_Tasks ( void )
     /* Check the application's current state. */
     switch ( appData.state )
     {
-        case APP_STATE_INIT_I2S:
-        {
-            
-            break;
-        }
         
         case APP_STATE_INIT_UI:
         {

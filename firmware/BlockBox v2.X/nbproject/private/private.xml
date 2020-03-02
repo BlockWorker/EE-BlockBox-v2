@@ -1,6 +1,21 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project-private xmlns="http://www.netbeans.org/ns/project-private/1">
+    <editor-bookmarks xmlns="http://www.netbeans.org/ns/editor-bookmarks/2" lastBookmarkId="0"/>
     <open-files xmlns="http://www.netbeans.org/ns/projectui-open-files/2">
-        <group/>
+        <group>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/dap.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/dap.h</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/ui.h</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/char_lcd.h</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/ui_button.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/char_lcd.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/app.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/bm83.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/bm83.h</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/ui_touch.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/app.h</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/i2s.c</file>
+            <file>file:/E:/Users/Alex/Documents/eagle/projects/BlockBox%20v2/firmware/src/i2s.h</file>
+        </group>
     </open-files>
 </project-private>
