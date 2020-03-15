@@ -27,7 +27,7 @@ DRV_HANDLE drv;
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-void onTransferEvent(DRV_I2C_TRANSFER_EVENT event, DRV_I2C_TRANSFER_HANDLE transferHandle, uintptr_t context) {
+void onI2CTransferEvent(DRV_I2C_TRANSFER_EVENT event, DRV_I2C_TRANSFER_HANDLE transferHandle, uintptr_t context) {
     
 }
 
@@ -40,7 +40,7 @@ void onTransferEvent(DRV_I2C_TRANSFER_EVENT event, DRV_I2C_TRANSFER_HANDLE trans
 
 void DAP_IO_Init() {
     drv = DRV_I2C_Open(DRV_I2C_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_I2C_TransferEventHandlerSet(drv, onTransferEvent, 0);
+    DRV_I2C_TransferEventHandlerSet(drv, onI2CTransferEvent, 0);
 }
 
 void DAP_Chip_Init() {

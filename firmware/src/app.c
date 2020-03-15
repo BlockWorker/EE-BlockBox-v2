@@ -130,16 +130,6 @@ void APP_Tasks ( void )
         case APP_STATE_INIT_BM83:
         {
             
-            
-            
-            bool appInitialized = true;
-
-
-            if (appInitialized)
-            {
-
-                appData.state = APP_STATE_SERVICE_TASKS;
-            }
             break;
         }
         
@@ -154,9 +144,6 @@ void APP_Tasks ( void )
 
             break;
         }
-
-        /* TODO: implement your application state machine.*/
-
 
         /* The default state should never be executed. */
         default:

@@ -30,7 +30,7 @@ DRV_HANDLE drv;
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-void onTransferEvent(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE transferHandle, uintptr_t context) {
+void onSPITransferEvent(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE transferHandle, uintptr_t context) {
     
 }
 

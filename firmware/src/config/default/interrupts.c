@@ -60,8 +60,8 @@
 // *****************************************************************************
 
 
+void CORE_TIMER_InterruptHandler( void );
 void TIMER_2_InterruptHandler( void );
-void TIMER_3_InterruptHandler( void );
 void I2C1_BUS_InterruptHandler( void );
 void I2C1_MASTER_InterruptHandler( void );
 void CHANGE_NOTICE_E_InterruptHandler( void );
@@ -69,7 +69,6 @@ void CHANGE_NOTICE_G_InterruptHandler( void );
 void DMA0_InterruptHandler( void );
 void DMA1_InterruptHandler( void );
 void DMA2_InterruptHandler( void );
-void DMA3_InterruptHandler( void );
 void SPI2_RX_InterruptHandler( void );
 void SPI2_TX_InterruptHandler( void );
 void UART2_FAULT_InterruptHandler( void );
@@ -80,14 +79,14 @@ void NVM_InterruptHandler( void );
 
 
 /* All the handlers are defined here.  Each will call its PLIB-specific function. */
+void __ISR(_CORE_TIMER_VECTOR, ipl1AUTO) CORE_TIMER_Handler (void)
+{
+    CORE_TIMER_InterruptHandler();
+}
+
 void __ISR(_TIMER_2_VECTOR, ipl1AUTO) TIMER_2_Handler (void)
 {
     TIMER_2_InterruptHandler();
-}
-
-void __ISR(_TIMER_3_VECTOR, ipl1AUTO) TIMER_3_Handler (void)
-{
-    TIMER_3_InterruptHandler();
 }
 
 void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
@@ -130,11 +129,6 @@ void __ISR(_DMA1_VECTOR, ipl1AUTO) DMA1_Handler (void)
 void __ISR(_DMA2_VECTOR, ipl1AUTO) DMA2_Handler (void)
 {
     DMA2_InterruptHandler();
-}
-
-void __ISR(_DMA3_VECTOR, ipl1AUTO) DMA3_Handler (void)
-{
-    DMA3_InterruptHandler();
 }
 
 void __ISR(_SPI2_RX_VECTOR, ipl1AUTO) SPI2_RX_Handler (void)

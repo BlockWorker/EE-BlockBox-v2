@@ -67,24 +67,28 @@ void GPIO_Initialize ( void )
     TRISACLR = 0x10; /* Direction Control */
     ANSELACLR = 0x21; /* Digital Mode Enable */
     CNPUASET = 0x1; /* Pull-Up Enable */
-    CNPDASET = 0x20; /* Pull-Down Enable */
+    CNPDASET = 0xe0; /* Pull-Down Enable */
 
     /* PORTB Initialization */
     ANSELBCLR = 0x72c; /* Digital Mode Enable */
+    CNPUBSET = 0x700; /* Pull-Up Enable */
 
     /* PORTC Initialization */
     LATC = 0x4; /* Initial Latch Value */
     TRISCCLR = 0x8; /* Direction Control */
     ANSELCCLR = 0xd01e; /* Digital Mode Enable */
     CNPUCSET = 0x4000; /* Pull-Up Enable */
+    CNPDCSET = 0x2000; /* Pull-Down Enable */
 
     /* PORTD Initialization */
-    LATD = 0x600; /* Initial Latch Value */
+    LATD = 0x200; /* Initial Latch Value */
     TRISDCLR = 0x2e00; /* Direction Control */
+    CNPDDSET = 0x8; /* Pull-Down Enable */
 
     /* PORTE Initialization */
     ANSELECLR = 0x3f0; /* Digital Mode Enable */
     CNPUESET = 0x1e; /* Pull-Up Enable */
+    CNPDESET = 0x1; /* Pull-Down Enable */
     /* Change Notice Enable */
     CNCONESET = _CNCONE_ON_MASK;
     PORTE;
@@ -94,12 +98,14 @@ void GPIO_Initialize ( void )
     LATF = 0x20; /* Initial Latch Value */
     TRISFCLR = 0x21; /* Direction Control */
     ANSELFCLR = 0x1000; /* Digital Mode Enable */
+    CNPDFSET = 0x6; /* Pull-Down Enable */
 
     /* PORTG Initialization */
     LATG = 0x8000; /* Initial Latch Value */
     TRISGCLR = 0x8000; /* Direction Control */
     ANSELGCLR = 0x83c0; /* Digital Mode Enable */
     CNPUGSET = 0x7200; /* Pull-Up Enable */
+    CNPDGSET = 0x3; /* Pull-Down Enable */
     /* Change Notice Enable */
     CNCONGSET = _CNCONG_ON_MASK;
     PORTG;

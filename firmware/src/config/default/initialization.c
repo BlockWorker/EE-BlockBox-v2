@@ -311,8 +311,6 @@ const DRV_USART_INTERRUPT_SOURCES drvUSART0InterruptSources =
     .intSources.multi.usartErrorInt        = _UART2_FAULT_VECTOR,
     /* DMA Tx interrupt line */
     .intSources.multi.dmaTxChannelInt      = _DMA2_VECTOR,
-    /* DMA Rx interrupt line */
-    .intSources.multi.dmaRxChannelInt      = _DMA3_VECTOR,
 };
 
 const DRV_USART_INIT drvUsart0InitData =
@@ -329,9 +327,7 @@ const DRV_USART_INIT drvUsart0InitData =
 
     .usartTransmitAddress = (void *)&(U2TXREG),
 
-    .dmaChannelReceive = DRV_USART_RCV_DMA_CH_IDX0,
-
-    .usartReceiveAddress = (void *)&(U2RXREG),
+    .dmaChannelReceive = SYS_DMA_CHANNEL_NONE,
 
     /* Combined size of transmit and receive buffer objects */
     .bufferObjPoolSize = DRV_USART_QUEUE_SIZE_IDX0,
@@ -376,17 +372,19 @@ SYSTEM_OBJECTS sysObj;
 // <editor-fold defaultstate="collapsed" desc="SYS_TIME Initialization Data">
 
 const SYS_TIME_PLIB_INTERFACE sysTimePlibAPI = {
-    .timerCallbackSet = (SYS_TIME_PLIB_CALLBACK_REGISTER)TMR3_CallbackRegister,
-    .timerStart = (SYS_TIME_PLIB_START)TMR3_Start,
-    .timerStop = (SYS_TIME_PLIB_STOP)TMR3_Stop ,
-    .timerFrequencyGet = (SYS_TIME_PLIB_FREQUENCY_GET)TMR3_FrequencyGet,
-    .timerPeriodSet = (SYS_TIME_PLIB_PERIOD_SET)TMR3_PeriodSet,
+    .timerCallbackSet = (SYS_TIME_PLIB_CALLBACK_REGISTER)CORETIMER_CallbackSet,
+    .timerStart = (SYS_TIME_PLIB_START)CORETIMER_Start,
+    .timerStop = (SYS_TIME_PLIB_STOP)CORETIMER_Stop ,
+    .timerFrequencyGet = (SYS_TIME_PLIB_FREQUENCY_GET)CORETIMER_FrequencyGet,
+    .timerPeriodSet = (SYS_TIME_PLIB_PERIOD_SET)NULL,
+    .timerCompareSet = (SYS_TIME_PLIB_COMPARE_SET)CORETIMER_CompareSet,
+    .timerCounterGet = (SYS_TIME_PLIB_COUNTER_GET)CORETIMER_CounterGet,
 };
 
 const SYS_TIME_INIT sysTimeInitData =
 {
     .timePlib = &sysTimePlibAPI,
-    .hwTimerIntNum = 14,
+    .hwTimerIntNum = 0,
 };
 
 // </editor-fold>
@@ -434,6 +432,7 @@ void SYS_Initialize ( void* data )
 
     NVM_Initialize();
 
+    CORETIMER_Initialize();
     I2C1_Initialize();
 
     ADCHS_Initialize();
@@ -441,8 +440,6 @@ void SYS_Initialize ( void* data )
 	UART2_Initialize();
 
     TMR2_Initialize();
-
-    TMR3_Initialize();
 
 	SPI2_Initialize();
 

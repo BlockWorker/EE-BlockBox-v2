@@ -17,11 +17,11 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#define I2S_RECEIVE_BUFFER_LEN 2048
+#define I2S_RECEIVE_BUFFER_LEN 0x800
 #define I2S_RECEIVE_BUFFER_PHYS_LOC 0x2000
 #define I2S_RECEIVE_BUFFER_VIRT_LOC I2S_RECEIVE_BUFFER_PHYS_LOC | 0x80000000
 
-volatile int32_t receiveBuffer[I2S_RECEIVE_BUFFER_LEN] __attribute__((address(I2S_RECEIVE_BUFFER_VIRT_LOC), keep));
+volatile int32_t i2s_receiveBuffer[I2S_RECEIVE_BUFFER_LEN] __attribute__((address(I2S_RECEIVE_BUFFER_VIRT_LOC), keep));
 
 
 /* ************************************************************************** */
