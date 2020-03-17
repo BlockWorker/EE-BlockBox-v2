@@ -48,18 +48,20 @@ extern "C" {
     } BM83_STATE;
     
     typedef enum {
+        BM83_CMD_MMI_Action = 0x02,
+        BM83_CMD_EventAck = 0x14,
         BM83_CMD_Rx_Buffer_Size = 0x1f,
-        BM83_CMD_MMI_Action = 0x02
+        BM83_CMD_NONE = 0xff
     } BM83_COMMAND;
     
     typedef enum {
-        BM83_EVENT_NONE = 0xff,
-        BM83_EVENT_CommandAck = 0x00
+        BM83_EVENT_CommandAck = 0x00,
+        BM83_EVENT_NONE = 0xff
     } BM83_EVENT;
     
     typedef enum {
         BM83_RESULT_SUCCESS = 0,
-        BM83_RESULT_TIMEOUT_RESET,
+        BM83_RESULT_TIMEOUT,
         BM83_RESULT_CHECKSUM_MISMATCH,
         BM83_RESULT_NACK,
         BM83_RESULT_OTHER_ERROR
