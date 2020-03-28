@@ -49,6 +49,7 @@ extern "C" {
     
     typedef enum {
         BM83_CMD_MMI_Action = 0x02,
+        BM83_CMD_Read_BTM_Version = 0x08,
         BM83_CMD_EventAck = 0x14,
         BM83_CMD_Rx_Buffer_Size = 0x1f,
         BM83_CMD_NONE = 0xff
@@ -79,8 +80,9 @@ extern "C" {
     
     BM83_STATE bm83_state;
     
+    void BM83_UART_DMAReplacement();
     void BM83_IO_Init();
-    void BM83_Module_Init();
+    void BM83_Module_Init(BM83_COMMAND_CALLBACK callback);
     bool BM83_Queue_Command(BM83_COMMAND command, uint8_t* params, uint16_t paramLength);
     bool BM83_Queue_Command_Callback(BM83_COMMAND command, uint8_t* params, uint16_t paramLength, BM83_COMMAND_CALLBACK callback, uintptr_t context);
     

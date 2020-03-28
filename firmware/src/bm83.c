@@ -9,7 +9,7 @@
 
 #define UART_RECEIVE_BUFFER_LEN 0x2000
 #define UART_RECEIVE_BUFFER_PHYS_LOC 0x4000
-#define UART_RECEIVE_BUFFER_VIRT_LOC UART_RECEIVE_BUFFER_PHYS_LOC | 0x80000000
+#define UART_RECEIVE_BUFFER_VIRT_LOC (UART_RECEIVE_BUFFER_PHYS_LOC | 0x80000000)
 #define UART_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
 
 typedef struct {
@@ -37,8 +37,11 @@ typedef struct {
 
 BM83_STATE bm83_state = BM83_NOT_INITIALIZED;
 
+BM83_COMMAND_CALLBACK bm83_init_callback = NULL;
+bool sendQueued = false;
+
 DRV_HANDLE drv;
-volatile uint8_t uart_receiveBuffer[UART_RECEIVE_BUFFER_LEN] __attribute__((address(UART_RECEIVE_BUFFER_VIRT_LOC), keep));
+volatile uint8_t uart_receiveBuffer[UART_RECEIVE_BUFFER_LEN] __attribute__((address(UART_RECEIVE_BUFFER_VIRT_LOC), keep, coherent));
 uint16_t uart_bufferReadPointer = 0;
 
 //command queues
@@ -90,8 +93,12 @@ void bm83_addToQueue(BM83_COMMAND_QUEUE* queue, BM83_QUEUE_ITEM* item) {
 
 //remove and return head of queue
 BM83_QUEUE_ITEM* bm83_takeFromQueue(BM83_COMMAND_QUEUE* queue) {
-    if (queue->length == 0) return NULL; //empty list catck
+    if (queue->length == 0) return NULL; //empty list catch
     BM83_QUEUE_ITEM* item = queue->head; //get result (current head)
+    if (item == NULL) { //catch error case
+        queue->length = 0;
+        return NULL;
+    }
     queue->head = item->next; //update head
     if (--queue->length == 0) queue->tail = NULL; //remove tail pointer if last item removed
     item->next = NULL; //unlink result from list
@@ -120,7 +127,7 @@ void bm83_removeFromQueue(BM83_COMMAND_QUEUE* queue, BM83_QUEUE_ITEM* item, BM83
 
 //find given event (or command expecting the given event) in the given queue and remove it
 BM83_QUEUE_ITEM* bm83_findAndRemoveEvent(BM83_COMMAND_QUEUE* queue, BM83_EVENT event) {
-    if (queue->length == 0) return NULL;
+    if (queue->length == 0 || queue->head == NULL) return NULL;
     
     BM83_QUEUE_ITEM* prev = NULL;
     BM83_QUEUE_ITEM* item = queue->head; //start at head
@@ -140,7 +147,7 @@ BM83_QUEUE_ITEM* bm83_findAndRemoveEvent(BM83_COMMAND_QUEUE* queue, BM83_EVENT e
 
 //callback for MFB pulse before command transmission
 void bm83_cmd_time_callback(uintptr_t context) {
-    if (unsentQueue.length == 0) return;
+    if (unsentQueue.length == 0 || !sendQueued) return;
     
     BM_MFB_Clear();
     uint16_t itemsLeft;
@@ -164,6 +171,8 @@ void bm83_cmd_time_callback(uintptr_t context) {
         task->previouslyFailed &= 0xfe; //after success: reset send request fail flag
         bm83_addToQueue(&sentQueue, item); //add item to sent queue
     }
+    
+    sendQueued = false; //send now performed
 }
 
 //callback for UART send events
@@ -183,6 +192,7 @@ void bm83_cmd_send_callback(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDL
     
     BM83_COMMAND_TASK* task = item->task;
     if (event == DRV_USART_BUFFER_EVENT_COMPLETE) { //if transfer successful:
+        if (task->command == BM83_CMD_EventAck) return; //if command is EventAck: no further response expected
         task->previouslyFailed &= 0xfc; //clear send error flag
         task->receiveTimeoutTick = SYS_TIME_CounterGet() + ackTimeoutTicks; //calculate ACK timeout
         bm83_addToQueue(&ackQueue, item); //add item to waiting-for-ACK queue
@@ -344,6 +354,7 @@ void BM83_Tasks() {
             uint8_t data = uart_receiveBuffer[realReadPtr];
             if (msgPos == 0) { //first byte: only accept sync word
                 if(data == 0xAA) msgPos++;
+                else uart_bufferReadPointer = realReadPtr + 1; //not sync word: skip byte
             } else if (msgPos == 1) { //second byte: high byte of length
                 payloadLength = data << 8;
                 crcSum = data;
@@ -434,9 +445,10 @@ void BM83_Tasks() {
     }
     
     //send new data
-    if (unsentQueue.length > 0) { //if items need to be sent: set MFB, send after 3ms
+    if (unsentQueue.length > 0 && !sendQueued) { //if items need to be sent: set MFB, send after 3ms
         BM_MFB_Set();
         SYS_TIME_CallbackRegisterMS(bm83_cmd_time_callback, 0, 3, SYS_TIME_SINGLE);
+        sendQueued = true; //prevent more calls before timeout
     }
 }
 
@@ -446,6 +458,8 @@ void BM83_Tasks() {
 
 //callback for init timer events
 void bm83_init_time_callback(uintptr_t context) {
+    const uint8_t bufferSize[] = { 0x04, 0x00 };
+    
     switch (context) {
         case 0: //after reset hold: set MFB, wait 20ms
         {
@@ -462,13 +476,14 @@ void bm83_init_time_callback(uintptr_t context) {
         case 2: //after init wait: clear MFB, start sending commands
         {
             BM_MFB_Clear();
-            
+            BM83_Queue_Command_Callback(BM83_CMD_Rx_Buffer_Size, (uint8_t*)bufferSize, 2, bm83_init_callback, NULL);
         }
     }
 }
 
 //initialization of peripherals and drivers
 void BM83_IO_Init() {
+    IEC4bits.U2RXIE = 0; //disable UART receive interrupt
     IEC4bits.DMA3IE = 0; //disable DMA interrupt
     
     DCH3CON = 0; //reset DMA config and disable channel
@@ -477,13 +492,15 @@ void BM83_IO_Init() {
     DCH3ECONbits.CHAIRQ = 0xFF; //no IRQ for DMA abort
     DCH3ECONbits.CHSIRQ = _UART2_RX_VECTOR; //DMA start on UART RX interrupt
     DCH3ECONbits.SIRQEN = 1; //enable DMA start IRQ
-    DCH3SSA = 0x1F822230; //DMA source: U2RXREG (physical address)
+    DCH3SSA = KVA_TO_PA(&U2RXREG); //0x1F822230; //DMA source: U2RXREG (physical address)
     DCH3DSA = UART_RECEIVE_BUFFER_PHYS_LOC; //DMA dest: receive buffer (physical address)
     DCH3SSIZ = 1; //DMA source size: 1 byte
     DCH3DSIZ = UART_RECEIVE_BUFFER_LEN; //DMA dest size: (buffer length) bytes
     DCH3CSIZ = 1; //DMA cell size: 1 byte
     DCH3CONbits.CHAEN = 1; //DMA auto-enable
     DCH3CONbits.CHEN = 1; //enable DMA channel
+    
+    uart_bufferReadPointer = 0; //reset buffer read pointer
     
     drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE); //open driver
     DRV_USART_BufferEventHandlerSet(drv, bm83_cmd_send_callback, 0); //set event handler
@@ -493,13 +510,14 @@ void BM83_IO_Init() {
 }
 
 //initialization of module and UART protocol
-void BM83_Module_Init() {
+void BM83_Module_Init(BM83_COMMAND_CALLBACK callback) {
     bm83_state = BM83_NOT_INITIALIZED; //reset state
     bm83_clearQueue(&unsentQueue); //clear all queues
     bm83_clearQueue(&sentQueue);
     bm83_clearQueue(&ackQueue);
     bm83_clearQueue(&responseQueue);
     bm83_clearQueue(&unhandledEventQueue);
+    bm83_init_callback = callback;
     BM_MFB_Clear();
     BM_RST_N_Clear(); //clear MFB and reset, resetting module
     SYS_TIME_CallbackRegisterMS(bm83_init_time_callback, 0, 200, SYS_TIME_SINGLE); //after 200ms: begin init sequence

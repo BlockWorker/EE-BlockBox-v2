@@ -124,10 +124,12 @@ void GPIO_Initialize ( void )
     SDI2R = 1;
     U2RXR = 4;
     INT4R = 10;
+    U1RXR = 12;
 
     /* PPS Output Remapping */
     RPG8R = 6;
     RPD5R = 2;
+    RPG0R = 1;
     RPE8R = 11;
     RPE9R = 11;
     RPB5R = 12;

@@ -71,9 +71,15 @@ APP_DATA appData;
 // *****************************************************************************
 // *****************************************************************************
 
+void sendStuff(uintptr_t context) {
+    //uint8_t type = 0x00;
+    //BM83_Queue_Command(BM83_CMD_Read_BTM_Version, &type, 1);
+    SYS_DEBUG_Message("test");
+}
 
-/* TODO:  Add any necessary local functions.
-*/
+void init_bm83_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
+    appData.state = APP_STATE_SERVICE_TASKS;
+}
 
 
 // *****************************************************************************
@@ -90,19 +96,16 @@ APP_DATA appData;
     See prototype in app.h.
  */
 
-void APP_Initialize ( void )
-{
-    /* Place the App state machine in its initial state. */
-    appData.state = APP_STATE_INIT_UI;
-
+void APP_Initialize() {
     UI_IO_Init();
     I2S_Init();
-    BM83_IO_Init();
     DAP_IO_Init();
-
-    /* TODO: Initialize your application's state machine and other
-     * parameters.
-     */
+    BM83_IO_Init();
+    
+    appData.state = APP_STATE_INIT_BM83;
+    BM83_Module_Init(init_bm83_callback);
+    
+    //SYS_TIME_CallbackRegisterMS(sendStuff, 0, 500, SYS_TIME_PERIODIC);
 }
 
 
@@ -114,20 +117,12 @@ void APP_Initialize ( void )
     See prototype in app.h.
  */
 
-void APP_Tasks ( void )
-{
+void APP_Tasks() {
 
     /* Check the application's current state. */
-    switch ( appData.state )
-    {
+    switch(appData.state) {
         
         case APP_STATE_INIT_UI:
-        {
-            
-            break;
-        }
-        
-        case APP_STATE_INIT_BM83:
         {
             
             break;
@@ -138,10 +133,16 @@ void APP_Tasks ( void )
             
             break;
         }
+        
+        case APP_STATE_INIT_BM83:
+        {
+            BM83_Tasks();
+            break;
+        }        
 
         case APP_STATE_SERVICE_TASKS:
         {
-
+            BM83_Tasks();
             break;
         }
 

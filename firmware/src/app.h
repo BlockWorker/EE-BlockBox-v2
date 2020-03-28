@@ -63,8 +63,8 @@ typedef enum
 {
     /* Application's state machine's initial state. */
     APP_STATE_INIT_UI=0,
-    APP_STATE_INIT_BM83,
     APP_STATE_INIT_DAP,
+    APP_STATE_INIT_BM83,
     APP_STATE_SERVICE_TASKS,
     /* TODO: Define states used by the application state machine. */
 

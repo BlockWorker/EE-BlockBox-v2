@@ -52,6 +52,7 @@
 #include "configuration.h"
 #include "definitions.h"
 #include "ui.h"
+#include "bm83.h"
 
 // *****************************************************************************
 // *****************************************************************************
@@ -62,13 +63,15 @@
 
 void CORE_TIMER_InterruptHandler( void );
 void TIMER_2_InterruptHandler( void );
+void UART1_FAULT_InterruptHandler( void );
+void UART1_RX_InterruptHandler( void );
+void UART1_TX_InterruptHandler( void );
 void I2C1_BUS_InterruptHandler( void );
 void I2C1_MASTER_InterruptHandler( void );
 void CHANGE_NOTICE_E_InterruptHandler( void );
 void CHANGE_NOTICE_G_InterruptHandler( void );
 void DMA0_InterruptHandler( void );
 void DMA1_InterruptHandler( void );
-void DMA2_InterruptHandler( void );
 void SPI2_RX_InterruptHandler( void );
 void SPI2_TX_InterruptHandler( void );
 void UART2_FAULT_InterruptHandler( void );
@@ -94,6 +97,21 @@ void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
 #ifdef UI_TOUCH
     UI_InterruptHandler();
 #endif
+}
+
+void __ISR(_UART1_FAULT_VECTOR, ipl1AUTO) UART1_FAULT_Handler (void)
+{
+    UART1_FAULT_InterruptHandler();
+}
+
+void __ISR(_UART1_RX_VECTOR, ipl1AUTO) UART1_RX_Handler (void)
+{
+    UART1_RX_InterruptHandler();
+}
+
+void __ISR(_UART1_TX_VECTOR, ipl1AUTO) UART1_TX_Handler (void)
+{
+    UART1_TX_InterruptHandler();
 }
 
 void __ISR(_I2C1_BUS_VECTOR, ipl1AUTO) I2C1_BUS_Handler (void)
@@ -126,11 +144,6 @@ void __ISR(_DMA1_VECTOR, ipl1AUTO) DMA1_Handler (void)
     DMA1_InterruptHandler();
 }
 
-void __ISR(_DMA2_VECTOR, ipl1AUTO) DMA2_Handler (void)
-{
-    DMA2_InterruptHandler();
-}
-
 void __ISR(_SPI2_RX_VECTOR, ipl1AUTO) SPI2_RX_Handler (void)
 {
     SPI2_RX_InterruptHandler();
@@ -148,7 +161,8 @@ void __ISR(_UART2_FAULT_VECTOR, ipl1AUTO) UART2_FAULT_Handler (void)
 
 void __ISR(_UART2_RX_VECTOR, ipl1AUTO) UART2_RX_Handler (void)
 {
-    UART2_RX_InterruptHandler();
+    //BM83_UART_DMAReplacement();
+    //UART2_RX_InterruptHandler();
 }
 
 void __ISR(_UART2_TX_VECTOR, ipl1AUTO) UART2_TX_Handler (void)

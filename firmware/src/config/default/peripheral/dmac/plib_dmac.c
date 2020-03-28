@@ -228,16 +228,8 @@ void DMAC_Initialize( void )
     /* CHBCIE = 1, CHTAIE=1, CHERIE=1 */
     DCH1INT = 0xB0000;
 
-    /* DMA channel 2 configuration */
-    /* CHPRI = 0 */
-    DCH2CON = 0x0;
-    /* CHSIRQ = 147, SIRQEN = 1 */
-    DCH2ECON = 0x9310;
-    /* CHBCIE = 1, CHTAIE=1, CHERIE=1 */
-    DCH2INT = 0xB0000;
-
     /* Enable DMA channel interrupts */
-    IEC4SET = 0 | 0x40 | 0x80 | 0x100 ;
+    IEC4SET = 0 | 0x40 | 0x80 ;
 }
 
 // *****************************************************************************
@@ -517,76 +509,6 @@ void DMA1_InterruptHandler (void)
     chanObj->inUse = false;
 
     IFS4CLR = 0x80;
-
-    /* Clear the interrupt flag and call event handler */
-    if((NULL != chanObj->pEventCallBack) && (DMAC_TRANSFER_EVENT_NONE != dmaEvent))
-    {
-        chanObj->pEventCallBack(dmaEvent, chanObj->hClientArg);
-    }
-
-
-}
-// *****************************************************************************
-/* Function:
-   void DMA2_InterruptHandler (void)
-
-  Summary:
-    Interrupt handler for interrupts from DMA2.
-
-  Description:
-    None
-
-  Parameters:
-    none
-
-  Returns:
-    void
-*/
-void DMA2_InterruptHandler (void)
-{
-    DMAC_CHANNEL_OBJECT *chanObj;
-    DMAC_TRANSFER_EVENT dmaEvent = DMAC_TRANSFER_EVENT_NONE;
-    bool retVal;
-
-    /* Find out the channel object */
-    chanObj = (DMAC_CHANNEL_OBJECT *) &gDMAChannelObj[2];
-
-    /* Check whether the active DMA channel event has occurred */
-    retVal = DCH2INTbits.CHBCIF;
-
-    if(true == retVal) /* irq due to transfer complete */
-    {
-        /* Channel is by default disabled on completion of a block transfer */
-        /* Clear the Block transfer complete flag */
-        DCH2INTCLR = _DCH2INT_CHBCIF_MASK;
-
-        /* Update error and event */
-        chanObj->errorInfo = DMAC_ERROR_NONE;
-        dmaEvent = DMAC_TRANSFER_EVENT_COMPLETE;
-    }
-    else if(true == DCH2INTbits.CHTAIF) /* irq due to transfer abort */
-    {
-        /* Channel is by default disabled on Transfer Abortion */
-        /* Clear the Abort transfer complete flag */
-        DCH2INTCLR = _DCH2INT_CHTAIF_MASK;
-
-        /* Update error and event */
-        chanObj->errorInfo = DMAC_ERROR_NONE;
-        dmaEvent = DMAC_TRANSFER_EVENT_ERROR;
-    }
-    else if(true == DCH2INTbits.CHERIF)
-    {
-        /* Clear the Block transfer complete flag */
-        DCH2INTCLR = _DCH2INT_CHERIF_MASK;
-
-        /* Update error and event */
-        chanObj->errorInfo = DMAC_ERROR_ADDRESS_ERROR;
-        dmaEvent = DMAC_TRANSFER_EVENT_ERROR;
-    }
-
-    chanObj->inUse = false;
-
-    IFS4CLR = 0x100;
 
     /* Clear the interrupt flag and call event handler */
     if((NULL != chanObj->pEventCallBack) && (DMAC_TRANSFER_EVENT_NONE != dmaEvent))

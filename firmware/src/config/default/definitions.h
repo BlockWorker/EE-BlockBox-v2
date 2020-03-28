@@ -51,27 +51,31 @@
 #include "peripheral/ocmp/plib_ocmp9.h"
 #include "peripheral/ocmp/plib_ocmp6.h"
 #include "peripheral/ocmp/plib_ocmp7.h"
-#include "peripheral/clk/plib_clk.h"
-#include "peripheral/gpio/plib_gpio.h"
-#include "peripheral/evic/plib_evic.h"
-#include "peripheral/dmac/plib_dmac.h"
 #include "peripheral/ocmp/plib_ocmp5.h"
 #include "peripheral/ocmp/plib_ocmp2.h"
 #include "driver/i2c/drv_i2c.h"
 #include "peripheral/nvm/plib_nvm.h"
 #include "system/time/sys_time.h"
 #include "peripheral/coretimer/plib_coretimer.h"
-#include "peripheral/i2c/plib_i2c1.h"
 #include "peripheral/adchs/plib_adchs.h"
+#include "peripheral/uart/plib_uart1.h"
 #include "peripheral/uart/plib_uart2.h"
 #include "peripheral/tmr/plib_tmr2.h"
-#include "driver/usart/drv_usart.h"
 #include "peripheral/spi/plib_spi2.h"
 #include "driver/spi/drv_spi.h"
 #include "system/int/sys_int.h"
 #include "system/ports/sys_ports.h"
 #include "system/dma/sys_dma.h"
 #include "osal/osal.h"
+#include "peripheral/clk/plib_clk.h"
+#include "peripheral/gpio/plib_gpio.h"
+#include "peripheral/evic/plib_evic.h"
+#include "peripheral/dmac/plib_dmac.h"
+#include "system/debug/sys_debug.h"
+#include "peripheral/i2c/plib_i2c1.h"
+#include "driver/usart/drv_usart.h"
+#include "system/console/sys_console.h"
+#include "system/console/src/sys_console_uart_definitions.h"
 #include "app.h"
 
 
@@ -197,10 +201,14 @@ typedef struct
     /* I2C0 Driver Object */
     SYS_MODULE_OBJ drvI2C0;
 
+    SYS_MODULE_OBJ  sysTime;
+    SYS_MODULE_OBJ  sysConsole0;
+
     /* SPI0 Driver Object */
     SYS_MODULE_OBJ drvSPI0;
 
-    SYS_MODULE_OBJ  sysTime;
+    SYS_MODULE_OBJ  sysDebug;
+
     SYS_MODULE_OBJ  drvUsart0;
 
 } SYSTEM_OBJECTS;

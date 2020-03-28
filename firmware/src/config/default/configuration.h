@@ -89,6 +89,26 @@ extern "C" {
 #define SYS_TIME_COMPARE_UPDATE_EXECUTION_CYCLES      (620)
 
 
+/* RX queue size has one additional element for the empty spot needed in circular queue */
+#define SYS_CONSOLE_UART_RD_QUEUE_DEPTH_IDX0    11
+
+/* TX queue size has one additional element for the empty spot needed in circular queue */
+#define SYS_CONSOLE_UART_WR_QUEUE_DEPTH_IDX0    65
+#define SYS_CONSOLE_BUFFER_DMA_READY
+
+
+#define SYS_DEBUG_ENABLE
+#define SYS_DEBUG_GLOBAL_ERROR_LEVEL       SYS_ERROR_DEBUG
+#define SYS_DEBUG_PRINT_BUFFER_SIZE        200
+#define SYS_DEBUG_BUFFER_DMA_READY
+#define SYS_DEBUG_USE_CONSOLE
+
+
+/* Console System Service Configuration Options */
+#define SYS_CONSOLE_DEVICE_MAX_INSTANCES   1
+#define SYS_CONSOLE_UART_MAX_INSTANCES     1
+
+
 
 // *****************************************************************************
 // *****************************************************************************
@@ -101,6 +121,13 @@ extern "C" {
 #define DRV_I2C_QUEUE_SIZE_IDX0               32
 #define DRV_I2C_CLOCK_SPEED_IDX0              50000
 
+/* I2C Driver Common Configuration Options */
+#define DRV_I2C_INSTANCES_NUMBER              1
+
+
+/* SPI Driver Common Configuration Options */
+#define DRV_SPI_INSTANCES_NUMBER              1
+
 /* SPI Driver Instance 0 Configuration Options */
 #define DRV_SPI_INDEX_0                       0
 #define DRV_SPI_CLIENTS_NUMBER_IDX0           1
@@ -109,21 +136,13 @@ extern "C" {
 #define DRV_SPI_RCV_DMA_CH_IDX0               SYS_DMA_CHANNEL_1
 #define DRV_SPI_QUEUE_SIZE_IDX0               32
 
-/* I2C Driver Common Configuration Options */
-#define DRV_I2C_INSTANCES_NUMBER              1
-
-
 /* USART Driver Instance 0 Configuration Options */
 #define DRV_USART_INDEX_0                  0
 #define DRV_USART_CLIENTS_NUMBER_IDX0      1
-#define DRV_USART_XMIT_DMA_CH_IDX0         SYS_DMA_CHANNEL_2
 #define DRV_USART_QUEUE_SIZE_IDX0          25
 
 /* USART Driver Global Configuration Options */
 #define DRV_USART_INSTANCES_NUMBER         1
-/* SPI Driver Common Configuration Options */
-#define DRV_SPI_INSTANCES_NUMBER              1
-
 
 
 // *****************************************************************************
