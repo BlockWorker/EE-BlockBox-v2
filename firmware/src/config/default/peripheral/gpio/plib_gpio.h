@@ -109,6 +109,14 @@
 #define LCD_GPIO0_OutputEnable()      (TRISCCLR = (1<<1))
 #define LCD_GPIO0_InputEnable()       (TRISCSET = (1<<1))
 #define LCD_GPIO0_PIN                  GPIO_PIN_RC1
+/*** Macros for LCD_CS_N pin ***/
+#define LCD_CS_N_Set()               (LATCSET = (1<<2))
+#define LCD_CS_N_Clear()             (LATCCLR = (1<<2))
+#define LCD_CS_N_Toggle()            (LATCINV= (1<<2))
+#define LCD_CS_N_Get()               ((PORTC >> 2) & 0x1)
+#define LCD_CS_N_OutputEnable()      (TRISCCLR = (1<<2))
+#define LCD_CS_N_InputEnable()       (TRISCSET = (1<<2))
+#define LCD_CS_N_PIN                  GPIO_PIN_RC2
 /*** Macros for LCD_PD_N pin ***/
 #define LCD_PD_N_Set()               (LATCSET = (1<<3))
 #define LCD_PD_N_Clear()             (LATCCLR = (1<<3))
@@ -189,54 +197,54 @@
 #define AMP_RESET_N_OutputEnable()      (TRISACLR = (1<<4))
 #define AMP_RESET_N_InputEnable()       (TRISASET = (1<<4))
 #define AMP_RESET_N_PIN                  GPIO_PIN_RA4
-/*** Macros for DSP_VALID pin ***/
-#define DSP_VALID_Set()               (LATFSET = (1<<4))
-#define DSP_VALID_Clear()             (LATFCLR = (1<<4))
-#define DSP_VALID_Toggle()            (LATFINV= (1<<4))
-#define DSP_VALID_Get()               ((PORTF >> 4) & 0x1)
-#define DSP_VALID_OutputEnable()      (TRISFCLR = (1<<4))
-#define DSP_VALID_InputEnable()       (TRISFSET = (1<<4))
-#define DSP_VALID_PIN                  GPIO_PIN_RF4
-/*** Macros for DSP_BKND_ERR_N pin ***/
-#define DSP_BKND_ERR_N_Set()               (LATFSET = (1<<5))
-#define DSP_BKND_ERR_N_Clear()             (LATFCLR = (1<<5))
-#define DSP_BKND_ERR_N_Toggle()            (LATFINV= (1<<5))
-#define DSP_BKND_ERR_N_Get()               ((PORTF >> 5) & 0x1)
-#define DSP_BKND_ERR_N_OutputEnable()      (TRISFCLR = (1<<5))
-#define DSP_BKND_ERR_N_InputEnable()       (TRISFSET = (1<<5))
-#define DSP_BKND_ERR_N_PIN                  GPIO_PIN_RF5
-/*** Macros for DSP_MUTE_N pin ***/
-#define DSP_MUTE_N_Set()               (LATDSET = (1<<9))
-#define DSP_MUTE_N_Clear()             (LATDCLR = (1<<9))
-#define DSP_MUTE_N_Toggle()            (LATDINV= (1<<9))
-#define DSP_MUTE_N_Get()               ((PORTD >> 9) & 0x1)
-#define DSP_MUTE_N_OutputEnable()      (TRISDCLR = (1<<9))
-#define DSP_MUTE_N_InputEnable()       (TRISDSET = (1<<9))
-#define DSP_MUTE_N_PIN                  GPIO_PIN_RD9
-/*** Macros for DSP_PDN_N pin ***/
-#define DSP_PDN_N_Set()               (LATDSET = (1<<10))
-#define DSP_PDN_N_Clear()             (LATDCLR = (1<<10))
-#define DSP_PDN_N_Toggle()            (LATDINV= (1<<10))
-#define DSP_PDN_N_Get()               ((PORTD >> 10) & 0x1)
-#define DSP_PDN_N_OutputEnable()      (TRISDCLR = (1<<10))
-#define DSP_PDN_N_InputEnable()       (TRISDSET = (1<<10))
-#define DSP_PDN_N_PIN                  GPIO_PIN_RD10
-/*** Macros for DSP_RESET_N pin ***/
-#define DSP_RESET_N_Set()               (LATDSET = (1<<11))
-#define DSP_RESET_N_Clear()             (LATDCLR = (1<<11))
-#define DSP_RESET_N_Toggle()            (LATDINV= (1<<11))
-#define DSP_RESET_N_Get()               ((PORTD >> 11) & 0x1)
-#define DSP_RESET_N_OutputEnable()      (TRISDCLR = (1<<11))
-#define DSP_RESET_N_InputEnable()       (TRISDSET = (1<<11))
-#define DSP_RESET_N_PIN                  GPIO_PIN_RD11
-/*** Macros for DSP_EMO1 pin ***/
-#define DSP_EMO1_Set()               (LATDSET = (1<<0))
-#define DSP_EMO1_Clear()             (LATDCLR = (1<<0))
-#define DSP_EMO1_Toggle()            (LATDINV= (1<<0))
-#define DSP_EMO1_Get()               ((PORTD >> 0) & 0x1)
-#define DSP_EMO1_OutputEnable()      (TRISDCLR = (1<<0))
-#define DSP_EMO1_InputEnable()       (TRISDSET = (1<<0))
-#define DSP_EMO1_PIN                  GPIO_PIN_RD0
+/*** Macros for DAP_VALID pin ***/
+#define DAP_VALID_Set()               (LATFSET = (1<<4))
+#define DAP_VALID_Clear()             (LATFCLR = (1<<4))
+#define DAP_VALID_Toggle()            (LATFINV= (1<<4))
+#define DAP_VALID_Get()               ((PORTF >> 4) & 0x1)
+#define DAP_VALID_OutputEnable()      (TRISFCLR = (1<<4))
+#define DAP_VALID_InputEnable()       (TRISFSET = (1<<4))
+#define DAP_VALID_PIN                  GPIO_PIN_RF4
+/*** Macros for DAP_BKND_ERR_N pin ***/
+#define DAP_BKND_ERR_N_Set()               (LATFSET = (1<<5))
+#define DAP_BKND_ERR_N_Clear()             (LATFCLR = (1<<5))
+#define DAP_BKND_ERR_N_Toggle()            (LATFINV= (1<<5))
+#define DAP_BKND_ERR_N_Get()               ((PORTF >> 5) & 0x1)
+#define DAP_BKND_ERR_N_OutputEnable()      (TRISFCLR = (1<<5))
+#define DAP_BKND_ERR_N_InputEnable()       (TRISFSET = (1<<5))
+#define DAP_BKND_ERR_N_PIN                  GPIO_PIN_RF5
+/*** Macros for DAP_MUTE_N pin ***/
+#define DAP_MUTE_N_Set()               (LATDSET = (1<<9))
+#define DAP_MUTE_N_Clear()             (LATDCLR = (1<<9))
+#define DAP_MUTE_N_Toggle()            (LATDINV= (1<<9))
+#define DAP_MUTE_N_Get()               ((PORTD >> 9) & 0x1)
+#define DAP_MUTE_N_OutputEnable()      (TRISDCLR = (1<<9))
+#define DAP_MUTE_N_InputEnable()       (TRISDSET = (1<<9))
+#define DAP_MUTE_N_PIN                  GPIO_PIN_RD9
+/*** Macros for DAP_PDN_N pin ***/
+#define DAP_PDN_N_Set()               (LATDSET = (1<<10))
+#define DAP_PDN_N_Clear()             (LATDCLR = (1<<10))
+#define DAP_PDN_N_Toggle()            (LATDINV= (1<<10))
+#define DAP_PDN_N_Get()               ((PORTD >> 10) & 0x1)
+#define DAP_PDN_N_OutputEnable()      (TRISDCLR = (1<<10))
+#define DAP_PDN_N_InputEnable()       (TRISDSET = (1<<10))
+#define DAP_PDN_N_PIN                  GPIO_PIN_RD10
+/*** Macros for DAP_RESET_N pin ***/
+#define DAP_RESET_N_Set()               (LATDSET = (1<<11))
+#define DAP_RESET_N_Clear()             (LATDCLR = (1<<11))
+#define DAP_RESET_N_Toggle()            (LATDINV= (1<<11))
+#define DAP_RESET_N_Get()               ((PORTD >> 11) & 0x1)
+#define DAP_RESET_N_OutputEnable()      (TRISDCLR = (1<<11))
+#define DAP_RESET_N_InputEnable()       (TRISDSET = (1<<11))
+#define DAP_RESET_N_PIN                  GPIO_PIN_RD11
+/*** Macros for DAP_EMO1 pin ***/
+#define DAP_EMO1_Set()               (LATDSET = (1<<0))
+#define DAP_EMO1_Clear()             (LATDCLR = (1<<0))
+#define DAP_EMO1_Toggle()            (LATDINV= (1<<0))
+#define DAP_EMO1_Get()               ((PORTD >> 0) & 0x1)
+#define DAP_EMO1_OutputEnable()      (TRISDCLR = (1<<0))
+#define DAP_EMO1_InputEnable()       (TRISDSET = (1<<0))
+#define DAP_EMO1_PIN                  GPIO_PIN_RD0
 /*** Macros for AUX_DETECT pin ***/
 #define AUX_DETECT_Set()               (LATCSET = (1<<14))
 #define AUX_DETECT_Clear()             (LATCCLR = (1<<14))

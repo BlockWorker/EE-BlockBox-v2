@@ -71,7 +71,6 @@ void I2C1_MASTER_InterruptHandler( void );
 void CHANGE_NOTICE_E_InterruptHandler( void );
 void CHANGE_NOTICE_G_InterruptHandler( void );
 void DMA0_InterruptHandler( void );
-void DMA1_InterruptHandler( void );
 void SPI2_RX_InterruptHandler( void );
 void SPI2_TX_InterruptHandler( void );
 void UART2_FAULT_InterruptHandler( void );
@@ -94,9 +93,27 @@ void __ISR(_TIMER_2_VECTOR, ipl1AUTO) TIMER_2_Handler (void)
 
 void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
 {
-#ifdef UI_TOUCH
+    #ifdef UI_TOUCH
     UI_InterruptHandler();
-#endif
+    #endif
+    SYS_INT_SourceStatusClear(INT_SOURCE_EXTERNAL_4);
+}
+
+void __ISR(_ADC_DF1_VECTOR, ipl1AUTO) ADC_DF1_Handler (void)
+{
+    batVoltageADCCallback();
+    SYS_INT_SourceStatusClear(INT_SOURCE_ADC_DF1);
+}
+
+void __ISR(_ADC_DF2_VECTOR, ipl1AUTO) ADC_DF2_Handler (void)
+{
+    batCurrentADCCallback();
+    SYS_INT_SourceStatusClear(INT_SOURCE_ADC_DF2);
+}
+
+void __ISR(_ADC_DF3_VECTOR, ipl1AUTO) ADC_DF3_Handler (void)
+{
+    SYS_INT_SourceStatusClear(INT_SOURCE_ADC_DF3);
 }
 
 void __ISR(_UART1_FAULT_VECTOR, ipl1AUTO) UART1_FAULT_Handler (void)
@@ -137,11 +154,6 @@ void __ISR(_CHANGE_NOTICE_G_VECTOR, ipl1AUTO) CHANGE_NOTICE_G_Handler (void)
 void __ISR(_DMA0_VECTOR, ipl1AUTO) DMA0_Handler (void)
 {
     DMA0_InterruptHandler();
-}
-
-void __ISR(_DMA1_VECTOR, ipl1AUTO) DMA1_Handler (void)
-{
-    DMA1_InterruptHandler();
 }
 
 void __ISR(_SPI2_RX_VECTOR, ipl1AUTO) SPI2_RX_Handler (void)

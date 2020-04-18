@@ -75,9 +75,9 @@ void GPIO_Initialize ( void )
 
     /* PORTC Initialization */
     LATC = 0x4; /* Initial Latch Value */
-    TRISCCLR = 0x8; /* Direction Control */
+    TRISCCLR = 0xc; /* Direction Control */
     ANSELCCLR = 0xd01e; /* Digital Mode Enable */
-    CNPUCSET = 0x4000; /* Pull-Up Enable */
+    CNPUCSET = 0x4010; /* Pull-Up Enable */
     CNPDCSET = 0x2000; /* Pull-Down Enable */
 
     /* PORTD Initialization */
@@ -135,7 +135,6 @@ void GPIO_Initialize ( void )
     RPB5R = 12;
     RPB3R = 12;
     RPB2R = 13;
-    RPC2R = 6;
 
     /* Lock back the system after PPS configuration */
     SYSKEY = 0x00000000;

@@ -11,9 +11,10 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
+#include "app.h"
 
-//#define UI_TOUCH
-#undef UI_TOUCH
+#define UI_TOUCH
+//#undef UI_TOUCH
 
 #ifndef UI_TOUCH
 #define LCD_RS_Set()        (LATGSET = (1<<6))
@@ -65,7 +66,8 @@ extern "C" {
     // *****************************************************************************
 
     void UI_IO_Init();
-    void UI_Main_Init();
+    void UI_Main_Init(SUCCESS_CALLBACK cb);
+    void UI_Tasks();
     void UI_InterruptHandler();
 
 

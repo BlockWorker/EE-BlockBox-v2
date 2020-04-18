@@ -57,6 +57,9 @@ void EVIC_Initialize( void )
     IPC0SET = 0x4 | 0x0;  /* CORE_TIMER:  Priority 1 / Subpriority 0 */
     IPC2SET = 0x400 | 0x0;  /* TIMER_2:  Priority 1 / Subpriority 0 */
     IPC5SET = 0x4000000 | 0x0;  /* EXTERNAL_4:  Priority 1 / Subpriority 0 */
+    IPC13SET = 0x4 | 0x0;  /* ADC_DF1:  Priority 1 / Subpriority 0 */
+    IPC13SET = 0x400 | 0x0;  /* ADC_DF2:  Priority 1 / Subpriority 0 */
+    IPC13SET = 0x40000 | 0x0;  /* ADC_DF3:  Priority 1 / Subpriority 0 */
     IPC28SET = 0x4 | 0x0;  /* UART1_FAULT:  Priority 1 / Subpriority 0 */
     IPC28SET = 0x400 | 0x0;  /* UART1_RX:  Priority 1 / Subpriority 0 */
     IPC28SET = 0x40000 | 0x0;  /* UART1_TX:  Priority 1 / Subpriority 0 */
@@ -65,7 +68,6 @@ void EVIC_Initialize( void )
     IPC30SET = 0x40000 | 0x0;  /* CHANGE_NOTICE_E:  Priority 1 / Subpriority 0 */
     IPC31SET = 0x4 | 0x0;  /* CHANGE_NOTICE_G:  Priority 1 / Subpriority 0 */
     IPC33SET = 0x40000 | 0x0;  /* DMA0:  Priority 1 / Subpriority 0 */
-    IPC33SET = 0x4000000 | 0x0;  /* DMA1:  Priority 1 / Subpriority 0 */
     IPC35SET = 0x4000000 | 0x0;  /* SPI2_RX:  Priority 1 / Subpriority 0 */
     IPC36SET = 0x4 | 0x0;  /* SPI2_TX:  Priority 1 / Subpriority 0 */
     IPC36SET = 0x400 | 0x0;  /* UART2_FAULT:  Priority 1 / Subpriority 0 */

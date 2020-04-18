@@ -131,9 +131,6 @@ extern "C" {
 /* SPI Driver Instance 0 Configuration Options */
 #define DRV_SPI_INDEX_0                       0
 #define DRV_SPI_CLIENTS_NUMBER_IDX0           1
-#define DRV_SPI_DMA_MODE
-#define DRV_SPI_XMIT_DMA_CH_IDX0              SYS_DMA_CHANNEL_0
-#define DRV_SPI_RCV_DMA_CH_IDX0               SYS_DMA_CHANNEL_1
 #define DRV_SPI_QUEUE_SIZE_IDX0               32
 
 /* USART Driver Instance 0 Configuration Options */

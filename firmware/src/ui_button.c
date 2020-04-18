@@ -1,4 +1,6 @@
 /* ************************************************************************** */
+#include "ui.h"
+
 #ifndef UI_TOUCH
 
 /* ************************************************************************** */
@@ -7,7 +9,6 @@
 /* ************************************************************************** */
 /* ************************************************************************** */
 
-#include "ui.h"
 #include "app.h"
 
 
@@ -56,13 +57,18 @@ void UI_IO_Init() {
     
     CNPDAbits.CNPDA5 = 0; //disable A5 pulldown
     TRISAbits.TRISA5 = 0; //make A5 an output
+    CNPUCbits.CNPUC4 = 0; //disable C4 pullup
     TRISCCLR = 0b11110; //make C1-4 outputs
     TRISECLR = 0b11100000; //make E5-7 outputs
     TRISGCLR = 0b111000000; //make G6-8 outputs
     LATGbits.LATG8 = 1; //set G8 high (LCD enable)
 }
 
-void UI_Main_Init() {
+void UI_Main_Init(SUCCESS_CALLBACK cb) {
+    
+}
+
+void UI_Tasks() {
     
 }
 

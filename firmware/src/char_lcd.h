@@ -4,6 +4,8 @@
 #ifndef _CHAR_LCD_H    /* Guard against multiple inclusion */
 #define _CHAR_LCD_H
 
+#include "ui.h"
+
 #ifndef UI_TOUCH
 
 /* ************************************************************************** */

@@ -32,127 +32,213 @@
 #include "bm83.h"
 #include "dap.h"
 #include "ui.h"
-
-// *****************************************************************************
-// *****************************************************************************
-// Section: Global Data Definitions
-// *****************************************************************************
-// *****************************************************************************
-
-// *****************************************************************************
-/* Application Data
-
-  Summary:
-    Holds application data
-
-  Description:
-    This structure holds the application's data.
-
-  Remarks:
-    This structure should be initialized by the APP_Initialize function.
-
-    Application strings and buffers are be defined outside this structure.
-*/
+#include "flash.h"
 
 APP_DATA appData;
 
-// *****************************************************************************
-// *****************************************************************************
-// Section: Application Callback Functions
-// *****************************************************************************
-// *****************************************************************************
+//batt voltage logging:
+//48200 counts = 15.84v ==> division factor 3042
+//51900 counts = 16.38v ==> division factor 3168
+//52600 counts = 16.43v ==> division factor 3201
+//53000 counts = 16.47v ==> division factor 3218
+//50600 counts = 15.72v ==> division factor 3218
+//50000 counts = 16.04v ==> division factor 3118
+//49500 counts = 16.02v ==> division factor 3090
+//--- capacitors added ---
+//48060c = 15.97v ==> x = 3009 //discharge, power ~= 0
+//51350c = 16.45v ==> x = 3121 //fast charge
+//51500c = 16.50v ==> x = 3121
+//52500c = 16.67v ==> x = 3150
+//50300c = 16.31v ==> x = 3084 //charger disconnected
+//50000c = 16.287v ==> x = 3070
 
-/* TODO:  Add any necessary callback functions.
-*/
+#define BATTERY_VOLTAGE_AVG_LENGTH 2048
+uint16_t batteryVoltageCounts[BATTERY_VOLTAGE_AVG_LENGTH] = { 0 };
+uint32_t batteryVoltageCountSum = 0;
+uint16_t batteryVoltageCountAverage = 0;
+#define BATTERY_CURR_AVG_LENGTH 2048
+uint16_t batteryCurrentCounts[BATTERY_CURR_AVG_LENGTH] = { 0 };
+uint32_t batteryCurrentCountSum = 0;
+uint16_t batteryCurrentCountAverage = 0;
 
-// *****************************************************************************
-// *****************************************************************************
-// Section: Application Local Functions
-// *****************************************************************************
-// *****************************************************************************
+#define BATTERY_VOLTAGE_CONV_FACTOR 3100.0
+double batteryVolts = 0.0;
+double batteryPercent = 100.0;
+double batteryAmps = 0.0;
+bool batteryUpdated = false;
+
+/********************/
+/* Helper functions */
+/********************/
+
+//resets the microcontroller
+void software_reset() {
+    SYSKEY = 0x00000000;
+    SYSKEY = 0xAA996655;
+    SYSKEY = 0x556699AA; //unlock
+    RSWRST = 1; //set software reset bit
+    (void)RSWRST; //read RSWRST to cause actual reset
+}
 
 void sendStuff(uintptr_t context) {
-    //uint8_t type = 0x00;
-    //BM83_Queue_Command(BM83_CMD_Read_BTM_Version, &type, 1);
-    SYS_DEBUG_Message("test");
+    switch (context) {
+        case 0:
+            BM83_PowerOn(NULL);
+            SYS_TIME_CallbackRegisterMS(sendStuff, 1, 2000, SYS_TIME_SINGLE);
+            break;
+        case 1:
+            BM83_EnterPairing(NULL);
+            DAP_MUTE_N_Set();
+            break;
+    }
 }
 
-void init_bm83_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
-    appData.state = APP_STATE_SERVICE_TASKS;
+/**************************/
+/* Runtime task functions */
+/**************************/
+
+void batVoltageADCCallback() {
+    static uint16_t arrayPos = 0;
+    batteryVoltageCountSum -= batteryVoltageCounts[arrayPos];
+    batteryVoltageCounts[arrayPos] = ADCFLTR1bits.FLTRDATA;
+    batteryVoltageCountSum += batteryVoltageCounts[arrayPos++];
+    arrayPos %= BATTERY_VOLTAGE_AVG_LENGTH;
+    batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;
+    batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR;
+    //batteryUpdated = true;
 }
 
+void batCurrentADCCallback() {
+    static uint16_t arrayPos = 0;
+    batteryCurrentCountSum -= batteryCurrentCounts[arrayPos];
+    batteryCurrentCounts[arrayPos] = ADCFLTR2bits.FLTRDATA;
+    batteryCurrentCountSum += batteryCurrentCounts[arrayPos++];
+    arrayPos %= BATTERY_CURR_AVG_LENGTH;
+    batteryCurrentCountAverage = batteryCurrentCountSum / BATTERY_CURR_AVG_LENGTH;
+}
 
-// *****************************************************************************
-// *****************************************************************************
-// Section: Application Initialization and State Machine Functions
-// *****************************************************************************
-// *****************************************************************************
+void millisecondCallback(uintptr_t context) {
+    static uint32_t msCount = 0;
+    
+    ADCHS_ChannelConversionStart(ADCHS_CH1);
+    ADCHS_ChannelConversionStart(ADCHS_CH2);
+    
+    if (msCount % 2048 == 0) {
+        batteryUpdated = true;
+    }
+    
+    msCount++;
+}
 
-/*******************************************************************************
-  Function:
-    void APP_Initialize ( void )
+void generalTasks() {
+    GPIO_PinWrite(AMP_RESET_N_PIN, DAP_VALID_Get());
+    
+    
+}
 
-  Remarks:
-    See prototype in app.h.
- */
+void APP_Tasks() {
+    switch(appData.state) {
+        case APP_STATE_INIT_UI:
+            UI_Tasks();
+            break;        
+        case APP_STATE_INIT_DAP:
+            UI_Tasks();
+            break;
+        case APP_STATE_INIT_BM83:
+            UI_Tasks();
+            BM83_Tasks();
+            break;
+        case APP_STATE_SERVICE_TASKS:
+            UI_Tasks();
+            BM83_Tasks();
+            generalTasks();
+            break;
+        default:
+            break;
+    }
+}
 
-void APP_Initialize() {
+/****************************/
+/* Initialization functions */
+/****************************/
+
+//callback for BM83 init
+void init_bm83_callback(bool success) {
+    static bool bmFailedBefore = false;
+    
+    if (success) { //success: BM init done
+        appData.state = APP_STATE_SERVICE_TASKS;
+        SYS_TIME_CallbackRegisterMS(millisecondCallback, NULL, 1, SYS_TIME_PERIODIC);
+        //SYS_TIME_CallbackRegisterMS(sendStuff, 0, 1000, SYS_TIME_SINGLE);
+    } else if (!bmFailedBefore) { //failed once: try again
+        bmFailedBefore = true;
+        BM83_Module_Init(init_bm83_callback);
+    } else { //failed twice: reset
+        software_reset();
+    }
+}
+
+void init_dap_callback(bool success) {
+    static bool dapFailedBefore = false;
+    
+    if (success) { //success: DAP init done, start BM83 init
+        appData.state = APP_STATE_INIT_BM83;
+        BM83_Module_Init(init_bm83_callback);
+    } else if (!dapFailedBefore) { //failed once: try again
+        dapFailedBefore = true;
+        DAP_Chip_Init(init_dap_callback);
+    } else { //failed twice: reset
+        software_reset();
+    }
+}
+
+void init_ui_callback(bool success) {
+    static bool uiFailedBefore = false;
+    
+    if (success) { //success: DAP init done, start BM83 init
+        appData.state = APP_STATE_SERVICE_TASKS;//APP_STATE_INIT_DAP;
+        SYS_TIME_CallbackRegisterMS(millisecondCallback, NULL, 1, SYS_TIME_PERIODIC);
+        //DAP_Chip_Init(init_dap_callback);
+    } else if (!uiFailedBefore) { //failed once: try again
+        uiFailedBefore = true;
+        UI_Main_Init(init_ui_callback);
+    } else { //failed twice: reset
+        software_reset();
+    }
+}
+
+void initBatADC() {
+    ADCFLTR1 = 0; //clear filter 1 config
+    ADCFLTR1bits.CHNLID = 1; //source: channel 1
+    ADCFLTR1bits.DFMODE = 0; //oversampling mode
+    ADCFLTR1bits.OVRSAM = 0b011; //256x oversampling
+    ADCFLTR1bits.AFGIEN = 1; //enable interrupt
+    ADCFLTR1bits.AFEN = 1; //enable filter 1
+    
+    ADCFLTR2 = 0; //clear filter 2 config
+    ADCFLTR2bits.CHNLID = 2; //source: channel 2
+    ADCFLTR2bits.DFMODE = 0; //oversampling mode
+    ADCFLTR2bits.OVRSAM = 0b011; //256x oversampling
+    ADCFLTR2bits.AFGIEN = 1; //enable interrupt
+    ADCFLTR2bits.AFEN = 1; //enable filter 2
+    
+    SYS_INT_SourceEnable(INT_SOURCE_ADC_DF1);
+    SYS_INT_SourceEnable(INT_SOURCE_ADC_DF2);
+}
+
+void APP_Initialize() {    
     UI_IO_Init();
     I2S_Init();
     DAP_IO_Init();
     BM83_IO_Init();
+    FLASH_Read();
     
-    appData.state = APP_STATE_INIT_BM83;
-    BM83_Module_Init(init_bm83_callback);
+    initBatADC();
     
-    //SYS_TIME_CallbackRegisterMS(sendStuff, 0, 500, SYS_TIME_PERIODIC);
-}
-
-
-/******************************************************************************
-  Function:
-    void APP_Tasks ( void )
-
-  Remarks:
-    See prototype in app.h.
- */
-
-void APP_Tasks() {
-
-    /* Check the application's current state. */
-    switch(appData.state) {
-        
-        case APP_STATE_INIT_UI:
-        {
-            
-            break;
-        }
-        
-        case APP_STATE_INIT_DAP:
-        {
-            
-            break;
-        }
-        
-        case APP_STATE_INIT_BM83:
-        {
-            BM83_Tasks();
-            break;
-        }        
-
-        case APP_STATE_SERVICE_TASKS:
-        {
-            BM83_Tasks();
-            break;
-        }
-
-        /* The default state should never be executed. */
-        default:
-        {
-            /* TODO: Handle error in application's state machine. */
-            break;
-        }
-    }
+    appData.state = APP_STATE_INIT_UI;
+    //BM83_Module_Init(init_bm83_callback);
+    //DAP_Chip_Init(init_dap_callback);
+    UI_Main_Init(init_ui_callback);
 }
 
 

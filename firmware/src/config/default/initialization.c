@@ -227,10 +227,6 @@ const DRV_SPI_INTERRUPT_SOURCES drvSPI0InterruptSources =
     .intSources.multi.spiTxReadyInt      = -1,
     .intSources.multi.spiTxCompleteInt   = _SPI2_TX_VECTOR,
     .intSources.multi.spiRxInt           = _SPI2_RX_VECTOR,
-    /* DMA Tx interrupt line */
-    .intSources.multi.dmaTxChannelInt      = _DMA0_VECTOR,
-    /* DMA Rx interrupt line */
-    .intSources.multi.dmaRxChannelInt      = _DMA1_VECTOR,
 };
 
 /* SPI Driver Initialization Data */
@@ -252,16 +248,10 @@ const DRV_SPI_INIT drvSPI0InitData =
     .clientObjPool = (uintptr_t)&drvSPI0ClientObjPool[0],
 
     /* DMA Channel for Transmit */
-    .dmaChannelTransmit = DRV_SPI_XMIT_DMA_CH_IDX0,
+    .dmaChannelTransmit = SYS_DMA_CHANNEL_NONE,
 
     /* DMA Channel for Receive */
-    .dmaChannelReceive  = DRV_SPI_RCV_DMA_CH_IDX0,
-
-    /* SPI Transmit Register */
-    .spiTransmitAddress =  (void *)&(SPI2BUF),
-
-    /* SPI Receive Register */
-    .spiReceiveAddress  = (void *)&(SPI2BUF),
+    .dmaChannelReceive  = SYS_DMA_CHANNEL_NONE,
 
     /* SPI Queue Size */
     .transferObjPoolSize = DRV_SPI_QUEUE_SIZE_IDX0,
