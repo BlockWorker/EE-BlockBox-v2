@@ -521,7 +521,11 @@ void busyReadCallback(bool success, uint16_t data, uintptr_t context) {
         VOIDCB_DATA* cb = (VOIDCB_DATA*)context;
         cb->callback(success, cb->context);
         free(cb);
-    } else SYS_TIME_CallbackRegisterMS(busyTimerCallback, context, 5, SYS_TIME_SINGLE);
+    } else {
+        if (SYS_TIME_CallbackRegisterMS(busyTimerCallback, context, 5, SYS_TIME_SINGLE) == SYS_TIME_HANDLE_INVALID) {
+            busyTimerCallback(context);
+        }
+    }
 }
 
 int FT8_busy(VOID_CALLBACK cb, uintptr_t context) {
@@ -1434,8 +1438,8 @@ void testListCallback(uintptr_t context) {
 }
 
 void initFinalCallback(bool success, uintptr_t context) {
-    FT8_get_cmdoffset(NULL, NULL); /* just to be safe */
-    SYS_TIME_CallbackRegisterMS(testListCallback, 0, 100, SYS_TIME_SINGLE);
+    FT8_get_cmdoffset(testListEndCallback, NULL); /* just to be safe */
+    //SYS_TIME_CallbackRegisterMS(testListCallback, 0, 100, SYS_TIME_SINGLE);
 }
 
 void initIDReadCallback(bool success, uint8_t data, uintptr_t context); //predef
@@ -1485,7 +1489,7 @@ void initPart2(bool success, uintptr_t context) {
     /* nothing is being displayed yet... the pixel clock is still 0x00 */
     FT8_memWrite8(REG_GPIO, 0x80); /* enable the DISP signal to the LCD panel, it is set to output in REG_GPIO_DIR by default */
     FT8_memWrite8(REG_PCLK, FT8_PCLK); /* now start clocking data to the LCD panel */
-    FT8_memWrite16(REG_PWM_HZ, 1000);
+    FT8_memWrite16(REG_PWM_HZ, 500);
     FT8_memWrite8(REG_PWM_DUTY, 64); /* turn on backlight to some value that needs to be adjusted or not... */
 
     SYS_TIME_CallbackRegisterMS(initTimerCallback, 3, 2, SYS_TIME_SINGLE);

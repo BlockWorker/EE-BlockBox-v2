@@ -94,7 +94,15 @@ extern "C" {
         BM83_CODEC_VP = 0x07
     } BM83_CODEC_STATUS;
     
+    typedef enum {
+        BM83_CHANGE_STATE = 0,
+        BM83_CHANGE_PLAYBACK,
+        BM83_CHANGE_CODEC
+    } BM83_STATE_CHANGE_TYPE;
+    
     typedef void (*BM83_COMMAND_CALLBACK)(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context);
+    
+    typedef void (*BM83_STATE_CHANGE_CALLBACK)(BM83_STATE_CHANGE_TYPE changeType);
 
     // *****************************************************************************
     // *****************************************************************************
@@ -117,6 +125,8 @@ extern "C" {
     void BM83_Module_Init(SUCCESS_CALLBACK callback);
     bool BM83_Queue_Command(BM83_COMMAND command, uint8_t* params, uint16_t paramLength);
     bool BM83_Queue_Command_Callback(BM83_COMMAND command, uint8_t* params, uint16_t paramLength, BM83_COMMAND_CALLBACK callback, uintptr_t context);
+    
+    void BM83_SetStateChangeCallback(BM83_STATE_CHANGE_CALLBACK callback);
     
     void BM83_Tasks();
     

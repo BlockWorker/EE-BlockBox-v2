@@ -1,0 +1,16 @@
+0: nothing
+1-9: misc basics
+  - 1: power on button
+  - 2: switch battery display?
+10-29: main screen
+  - 10: player backwards
+  - 11: player play/pause
+  - 12: player forwards
+  - 13: volume -
+  - 14: mute/unmute
+  - 15: volume +
+  - 16: bluetooth
+  - 17: light
+  - 18: settings
+  - 19: power down
+  - 20: player seek?

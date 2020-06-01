@@ -44,6 +44,8 @@ bool bm83_pairing = false;
 SUCCESS_CALLBACK bm83_init_callback = NULL;
 bool sendQueued = false;
 
+BM83_STATE_CHANGE_CALLBACK stateChangeCallback = NULL;
+
 DRV_HANDLE drv;
 volatile uint8_t uart_receiveBuffer[UART_RECEIVE_BUFFER_LEN] __attribute__((address(UART_RECEIVE_BUFFER_VIRT_LOC), keep, coherent));
 uint16_t uart_bufferReadPointer = 0;
@@ -279,7 +281,10 @@ bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length,
                 case 0x0F:
                     bm83_state = BM83_IDLE;
                     break;
+                default:
+                    return true;
             }
+            if (stateChangeCallback != NULL) stateChangeCallback(BM83_CHANGE_STATE);
             return true;
         case BM83_EVENT_Ringtone_Status_Indication: //ringtone status: ignore for now
             return true;
@@ -288,6 +293,7 @@ bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length,
             bm83_samplerate = buffer[4];
             bm83_update_sr();
             bm83_codec_status = buffer[5];
+            if (stateChangeCallback != NULL) stateChangeCallback(BM83_CHANGE_CODEC);
             return true;
         case BM83_EVENT_Report_BTM_Initial_Status: //initialization
             if (!BM83_Queue_Command_Callback(BM83_CMD_Rx_Buffer_Size, (uint8_t*)bufferSize, 2, bm83_init_finish_callback, NULL)) {
@@ -538,6 +544,10 @@ void BM83_Tasks() {
         SYS_TIME_CallbackRegisterMS(bm83_cmd_time_callback, 0, 3, SYS_TIME_SINGLE);
         sendQueued = true; //prevent more calls before timeout
     }
+}
+
+void BM83_SetStateChangeCallback(BM83_STATE_CHANGE_CALLBACK callback) {
+    stateChangeCallback = callback;
 }
 
 /******************************/

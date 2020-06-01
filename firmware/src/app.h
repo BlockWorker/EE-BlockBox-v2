@@ -33,6 +33,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <math.h>
 #include "configuration.h"
 #include "definitions.h"
 
@@ -100,7 +101,7 @@ typedef struct
 uint16_t batteryVoltageCountAverage;
 uint16_t batteryCurrentCountAverage;
 double batteryVolts;
-double batteryPercent;
+uint8_t batteryPercent;
 double batteryAmps;
 bool batteryUpdated;
 

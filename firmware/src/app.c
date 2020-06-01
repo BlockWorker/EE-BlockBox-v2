@@ -63,7 +63,8 @@ uint16_t batteryCurrentCountAverage = 0;
 
 #define BATTERY_VOLTAGE_CONV_FACTOR 3100.0
 double batteryVolts = 0.0;
-double batteryPercent = 100.0;
+double batteryPercentRaw = 100.0;
+uint8_t batteryPercent = 100.0;
 double batteryAmps = 0.0;
 bool batteryUpdated = false;
 
@@ -99,13 +100,23 @@ void sendStuff(uintptr_t context) {
 
 void batVoltageADCCallback() {
     static uint16_t arrayPos = 0;
+    
     batteryVoltageCountSum -= batteryVoltageCounts[arrayPos];
     batteryVoltageCounts[arrayPos] = ADCFLTR1bits.FLTRDATA;
     batteryVoltageCountSum += batteryVoltageCounts[arrayPos++];
     arrayPos %= BATTERY_VOLTAGE_AVG_LENGTH;
+    
     batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;
     batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR;
-    //batteryUpdated = true;
+    
+    batteryPercentRaw = (batteryVolts - 12.0) / 0.048;
+    if (batteryPercentRaw < 0.0) batteryPercentRaw = 0.0;
+    else if (batteryPercentRaw > 100.0) batteryPercentRaw = 100.0;
+    
+    double diff = batteryPercent - batteryPercentRaw;
+    if (diff < -0.1 || diff > 0.1) { //update percent with hysteresis
+        batteryPercent = (uint8_t)rint(batteryPercentRaw);
+    }
 }
 
 void batCurrentADCCallback() {
@@ -123,7 +134,7 @@ void millisecondCallback(uintptr_t context) {
     ADCHS_ChannelConversionStart(ADCHS_CH1);
     ADCHS_ChannelConversionStart(ADCHS_CH2);
     
-    if (msCount % 2048 == 0) {
+    if (msCount % BATTERY_VOLTAGE_AVG_LENGTH == 0) {
         batteryUpdated = true;
     }
     
