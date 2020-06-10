@@ -16,26 +16,34 @@
 
 #define DAP_I2C_ADDRESS 0x1a
 #define I2C_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
+#define DAP_TASK_LIST_LENGTH 100
 
 typedef struct {
     uint8_t* data;
     uint16_t dataLength;
     bool write;
     uint32_t delay;
+    uint8_t errorCount;
     DAP_COMMAND_CALLBACK callback;
     uintptr_t callbackContext;
+    uint8_t index;
+    bool free;
+    bool sent;
+    bool waiting;
+    uint32_t timeoutTick;
+    DRV_I2C_TRANSFER_HANDLE handle;
 } DAP_COMMAND_TASK;
 
-typedef struct bm_queueitem {
+/*typedef struct dap_queueitem {
     DAP_COMMAND_TASK* task;
-    struct bm_queueitem* next;
+    struct dap_queueitem* next;
 } DAP_QUEUE_ITEM;
 
 typedef struct {
     DAP_QUEUE_ITEM* head;
     DAP_QUEUE_ITEM* tail;
     uint16_t length;
-} DAP_COMMAND_QUEUE;
+} DAP_COMMAND_QUEUE;*/
 
 const uint8_t __attribute__((keep)) inputMixerCfg[] = //input mixer: 0.5 * A + 0.5 * B (stereo mixed into mono)
 { 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00,
@@ -108,17 +116,21 @@ const uint32_t __attribute__((keep)) eqHifiOld_bass_volume = 0x048; //0dB
 
 const uint8_t __attribute__((keep)) bassTrebleBypass[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00 }; //bass and treble set to inline mode
 
-DRV_HANDLE drv;
+static DRV_HANDLE dap_drv;
 
-uint32_t sendTimeoutTicks; //how many ticks a transfer takes to time out
+static uint32_t dap_sendTimeoutTicks; //how many ticks a transfer takes to time out
+static uint32_t dap_sendPauseTicks; //how many ticks between transfers
 
-DAP_COMMAND_QUEUE transferQueue = { NULL, NULL, 0 };
-bool dap_sending = false;
-uint32_t lastSendTick = 0;
-DAP_COMMAND_TASK* currentTask = NULL;
+static DAP_COMMAND_TASK dap_transferTasks[DAP_TASK_LIST_LENGTH];
 
-bool initInProgress = false;
-SUCCESS_CALLBACK initSuccessCallback = NULL;
+bool dap_shutDown = true;
+uint16_t dap_volume = 0x098;
+bool dap_muted = true;
+
+static bool dap_initInProgress = false;
+static SUCCESS_CALLBACK dap_initSuccessCallback = NULL;
+
+static uint32_t dap_sendNextAt;
 
 /********************/
 /* Helper functions */
@@ -127,116 +139,77 @@ SUCCESS_CALLBACK initSuccessCallback = NULL;
 void dap_freeTask(DAP_COMMAND_TASK* task) {
     if (task == NULL) return;
     free(task->data);
-    free(task);
+    task->free = true;
 }
 
-void dap_freeItem(DAP_QUEUE_ITEM* item) {
-    if (item == NULL) return;
-    dap_freeTask(item->task);
-    free(item);
-}
-
-/******************/
-/* List functions */
-/******************/
-
-//append item at end of queue
-void dap_addToQueue(DAP_COMMAND_QUEUE* queue, DAP_QUEUE_ITEM* item) {
-    item->next = NULL; //remove potential old list association
-    if (queue->length == 0) queue->head = item; //if first item: set head
-    else queue->tail->next = item; //otherwise: put behind current tail
-    queue->tail = item;
-    queue->length++;
-}
-
-//remove and return head of queue
-DAP_QUEUE_ITEM* dap_takeFromQueue(DAP_COMMAND_QUEUE* queue) {
-    if (queue->length == 0) return NULL; //empty list catch
-    DAP_QUEUE_ITEM* item = queue->head; //get result (current head)
-    if (item == NULL) { //catch error case
-        queue->length = 0;
-        return NULL;
+DAP_COMMAND_TASK* dap_getFreeTask() {
+    int i;
+    for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) {
+        DAP_COMMAND_TASK* task = dap_transferTasks + i;
+        if (task->free) return task;
     }
-    queue->head = item->next; //update head
-    if (--queue->length == 0) queue->tail = NULL; //remove tail pointer if last item removed
-    item->next = NULL; //unlink result from list
-    return item;
+    return NULL;
 }
 
-//clear queue, freeing all memory
-void dap_clearQueue(DAP_COMMAND_QUEUE* queue) {
-    DAP_QUEUE_ITEM* item = queue->head;
-    while (item != NULL) {
-        dap_freeItem(item);
-        item = item->next;
+void dap_clearTaskList() {
+    int i;
+    for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) {
+        DAP_COMMAND_TASK* task = dap_transferTasks + i;
+        task->index = i;
+        task->free = true;
     }
-    queue->head = NULL;
-    queue->tail = NULL;
-    queue->length = 0;
 }
 
 /**********************/
 /* Transfer functions */
 /**********************/
 
-//whether a new transfer can be done
-bool dap_freeToSend() {
-    if (!dap_sending) return true; //true if not sending
-    if (SYS_TIME_CounterGet() - lastSendTick - sendTimeoutTicks < I2C_TIMEOUT_MAX_DIFF) { //true if last send timed out
-        dap_sending = false;
-        return true;
-    }
-    return false; //otherwise false
-}
-
-//send next packet from queue
-void dap_sendNext() {
-    DAP_QUEUE_ITEM* item = dap_takeFromQueue(&transferQueue); //take next item
-    if (item == NULL) { //no items left: sending finished
-        dap_sending = false;
-        return;
-    }
-    dap_sending = true; //set sending status + timestamp
-    lastSendTick = SYS_TIME_CounterGet();
-    currentTask = item->task;
-    DRV_I2C_TRANSFER_HANDLE handle;
-    if (currentTask->write) DRV_I2C_WriteTransferAdd(drv, DAP_I2C_ADDRESS, currentTask->data, currentTask->dataLength, &handle); //write: simple write task
-    else DRV_I2C_WriteReadTransferAdd(drv, DAP_I2C_ADDRESS, currentTask->data, 1, currentTask->data + 1, currentTask->dataLength - 1, &handle); //read: write subaddress, read data
-    free(item);
-}
-
 //timer callback for command callback delay
 void dap_callback_delay(uintptr_t context) {
-    currentTask->callback(true, currentTask->data, currentTask->dataLength, currentTask->callbackContext);
-    dap_freeTask(currentTask);
-    dap_sendNext();
+    DAP_COMMAND_TASK* task = (DAP_COMMAND_TASK*)context;
+    task->callback(true, task->data, task->dataLength, task->callbackContext);
+    dap_freeTask(task);
 }
 
 //I2C transfer callback
 void onI2CTransferEvent(DRV_I2C_TRANSFER_EVENT event, DRV_I2C_TRANSFER_HANDLE transferHandle, uintptr_t context) {
     if (event == DRV_I2C_TRANSFER_EVENT_PENDING) return; //ignore pending event
     
-    if (currentTask != NULL && currentTask->callback != NULL) { //if callback exists:
-        if (event == DRV_I2C_TRANSFER_EVENT_COMPLETE) { //completed transfer: callback success
-            if (currentTask->delay > 0) { //if delay requested: set delay callback, otherwise callback immediately
-                SYS_TIME_CallbackRegisterMS(dap_callback_delay, 0, currentTask->delay, SYS_TIME_SINGLE);
-                return;
-            } else currentTask->callback(true, currentTask->data, currentTask->dataLength, currentTask->callbackContext);
-        } else { //not completed: callback fail
-            currentTask->callback(false, currentTask->data, currentTask->dataLength, currentTask->callbackContext);
+    DAP_COMMAND_TASK* task = NULL;
+    int i;
+    for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) { //find corresponding task
+        DAP_COMMAND_TASK* t = dap_transferTasks + i;
+        if (!t->free && t->handle == transferHandle && t->sent) {
+            task = t;
+            break;
         }
     }
+    if (task == NULL) return;
     
-    dap_freeTask(currentTask);
+    if (event == DRV_I2C_TRANSFER_EVENT_COMPLETE) { //completed transfer: callback success
+        if (task->callback) {
+            if (task->delay > 0) { //if delay requested: set delay callback, otherwise callback immediately
+                task->waiting = true;
+                SYS_TIME_CallbackRegisterMS(dap_callback_delay, (uintptr_t)task, task->delay, SYS_TIME_SINGLE);
+                return;
+            } else task->callback(true, task->data, task->dataLength, task->callbackContext);
+        }
+    } else if (task->errorCount++ < 5) { //not completed: try again
+        task->sent = false;
+        return;
+    } else if (task->callback) { //not completed: callback fail
+        task->callback(false, task->data, task->dataLength, task->callbackContext);
+    }
     
-    dap_sendNext(); //send next packet if present
+    dap_freeTask(task);
 }
 
 //write from buffer with callback
 bool DAP_WriteBufferCallback(uint8_t subaddress, uint8_t* buffer, uint16_t length, DAP_COMMAND_CALLBACK callback, uintptr_t context, uint32_t callbackDelayMs) {
-    DAP_COMMAND_TASK* task = malloc(sizeof(DAP_COMMAND_TASK)); //allocate task object
+    DAP_COMMAND_TASK* task = dap_getFreeTask(); //get task object
     if (task == NULL) return false;
     
+    task->free = false;
     task->dataLength = length + 1;
     task->data = malloc(task->dataLength); //allocate data array
     if (task->data == NULL) {
@@ -247,19 +220,12 @@ bool DAP_WriteBufferCallback(uint8_t subaddress, uint8_t* buffer, uint16_t lengt
     task->delay = callbackDelayMs;
     task->callback = callback;
     task->callbackContext = context;
+    task->errorCount = 0;
+    task->sent = false;
+    task->waiting = false;
     
     task->data[0] = subaddress;
     memcpy(task->data + 1, buffer, length); //copy data
-    
-    DAP_QUEUE_ITEM* item = malloc(sizeof(DAP_QUEUE_ITEM)); //allocate queue item
-    if (item == NULL) {
-        dap_freeTask(task);
-        return false;
-    }
-    item->task = task;
-    dap_addToQueue(&transferQueue, item); //add item to unsent queue
-    
-    if (dap_freeToSend()) dap_sendNext();
     
     return true;
 }
@@ -293,9 +259,10 @@ bool DAP_WriteByte(uint8_t subaddress, uint8_t value) {
 
 //read data with callback
 bool DAP_Read(uint8_t subaddress, uint16_t length, DAP_COMMAND_CALLBACK callback, uintptr_t context) {
-    DAP_COMMAND_TASK* task = malloc(sizeof(DAP_COMMAND_TASK)); //allocate task object
+    DAP_COMMAND_TASK* task = dap_getFreeTask(); //get task object
     if (task == NULL) return false;
     
+    task->free = false;
     task->dataLength = length + 1;
     task->data = malloc(task->dataLength); //allocate data array
     if (task->data == NULL) {
@@ -305,20 +272,111 @@ bool DAP_Read(uint8_t subaddress, uint16_t length, DAP_COMMAND_CALLBACK callback
     task->write = false;
     task->callback = callback;
     task->callbackContext = context;
+    task->errorCount = 0;
+    task->sent = false;
+    task->waiting = false;
     
     task->data[0] = subaddress;
     
-    DAP_QUEUE_ITEM* item = malloc(sizeof(DAP_QUEUE_ITEM)); //allocate queue item
-    if (item == NULL) {
-        dap_freeTask(task);
-        return false;
-    }
-    item->task = task;
-    dap_addToQueue(&transferQueue, item); //add item to unsent queue
-    
-    if (dap_freeToSend()) dap_sendNext();
-    
     return true;
+}
+
+void DAP_Tasks() {
+    uint32_t tick = SYS_TIME_CounterGet();
+    
+    int i;
+    for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) {
+        DAP_COMMAND_TASK* task = dap_transferTasks + i;
+        if (task->free) continue;
+        if (task->sent) {
+            if (tick - task->timeoutTick < I2C_TIMEOUT_MAX_DIFF && !task->waiting) {
+                task->sent = false;
+                task->errorCount++;
+            }
+        } else if (tick - dap_sendNextAt < I2C_TIMEOUT_MAX_DIFF) {
+        //} else {
+            if (task->write) DRV_I2C_WriteTransferAdd(dap_drv, DAP_I2C_ADDRESS, task->data, task->dataLength, &task->handle); //write: simple write task
+            else DRV_I2C_WriteReadTransferAdd(dap_drv, DAP_I2C_ADDRESS, task->data, 1, task->data + 1, task->dataLength - 1, &task->handle); //read: write subaddress, read data
+            if (task->handle == DRV_I2C_TRANSFER_EVENT_HANDLE_INVALID) continue;
+            task->sent = true;
+            task->timeoutTick = tick + dap_sendTimeoutTicks;
+            dap_sendNextAt = tick + dap_sendPauseTicks;
+        }
+    }
+    if (tick - dap_sendNextAt < I2C_TIMEOUT_MAX_DIFF) dap_sendNextAt = tick;
+}
+
+/***********************/
+/* Interface functions */
+/***********************/
+
+void dap_setVolumeCallback(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+    if (success) {
+        dap_volume = (buffer[3] << 8) | buffer[4];
+    }
+    if (context) ((SUCCESS_CALLBACK)context)(success);
+}
+
+bool DAP_SetVolume(uint16_t volume, SUCCESS_CALLBACK callback) {
+    if (dap_shutDown) return false;
+    if (dap_volume == volume) return false;
+    return DAP_WriteWordCallback(0xd9, volume, dap_setVolumeCallback, (uintptr_t)callback, 70);
+}
+
+void dap_shutdown_timer_callback(uintptr_t context) {
+    DAP_PDN_N_Clear();
+    dap_shutDown = true;
+    if (context) ((SUCCESS_CALLBACK)context)(true);
+}
+
+bool DAP_ShutDown(SUCCESS_CALLBACK callback) {
+    if (dap_shutDown) return false;
+    if (SYS_TIME_CallbackRegisterMS(dap_shutdown_timer_callback, (uintptr_t)callback, 70, SYS_TIME_SINGLE) != SYS_TIME_HANDLE_INVALID) {
+        DAP_MUTE_N_Clear();
+        return true;
+    } else return false;
+}
+
+void dap_startup_timer_callback(uintptr_t context) {
+    DAP_MUTE_N_Set();
+    dap_shutDown = false;
+    if (context) ((SUCCESS_CALLBACK)context)(true);
+}
+
+bool DAP_StartUp(SUCCESS_CALLBACK callback) {
+    if (!dap_shutDown) return false;
+    if (SYS_TIME_CallbackRegisterMS(dap_startup_timer_callback, (uintptr_t)callback, 10, SYS_TIME_SINGLE) != SYS_TIME_HANDLE_INVALID) {
+        DAP_PDN_N_Set();
+        return true;
+    } else return false;
+}
+
+void dap_mute_timer_callback(uintptr_t context) {
+    dap_muted = true;
+    if (context) ((SUCCESS_CALLBACK)context)(true);
+}
+
+bool DAP_Mute(SUCCESS_CALLBACK callback) {
+    if (dap_shutDown) return false;
+    if (dap_muted) return false;
+    if (SYS_TIME_CallbackRegisterMS(dap_mute_timer_callback, (uintptr_t)callback, 70, SYS_TIME_SINGLE) != SYS_TIME_HANDLE_INVALID) {
+        DAP_MUTE_N_Clear();
+        return true;
+    } else return false;
+}
+
+void dap_unmute_timer_callback(uintptr_t context) {
+    dap_muted = false;
+    if (context) ((SUCCESS_CALLBACK)context)(true);
+}
+
+bool DAP_Unmute(SUCCESS_CALLBACK callback) {
+    if (dap_shutDown) return false;
+    if (!dap_muted) return false;
+    if (SYS_TIME_CallbackRegisterMS(dap_unmute_timer_callback, (uintptr_t)callback, 70, SYS_TIME_SINGLE) != SYS_TIME_HANDLE_INVALID) {
+        DAP_MUTE_N_Set();
+        return true;
+    } else return false;
 }
 
 /****************************/
@@ -326,18 +384,19 @@ bool DAP_Read(uint8_t subaddress, uint16_t length, DAP_COMMAND_CALLBACK callback
 /****************************/
 
 void DAP_IO_Init() {
-    drv = DRV_I2C_Open(DRV_I2C_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_I2C_TransferEventHandlerSet(drv, onI2CTransferEvent, 0);
+    dap_drv = DRV_I2C_Open(DRV_I2C_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
+    DRV_I2C_TransferEventHandlerSet(dap_drv, onI2CTransferEvent, 0);
     
-    sendTimeoutTicks = SYS_TIME_MSToCount(1000);
+    dap_sendTimeoutTicks = SYS_TIME_MSToCount(1000);
+    dap_sendPauseTicks = SYS_TIME_MSToCount(50);
 }
 
 void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
-    if (!initInProgress) return;
+    if (!dap_initInProgress) return;
     
     if (!success) {
-        initInProgress = false;
-        if (initSuccessCallback != NULL) initSuccessCallback(false);
+        dap_initInProgress = false;
+        if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(false);
     }
     
     bool sendSuccess = true;
@@ -367,13 +426,16 @@ void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength,
             sendSuccess = DAP_WriteByteCallback(0x03, 0x80, dap_init_cmd_callback, 7, 0); //syscon1: soft unmute from error, enable channels
             break;
         case 7: //init done
-            initInProgress = false;
-            if (initSuccessCallback != NULL) initSuccessCallback(true);
+            dap_initInProgress = false;
+            dap_shutDown = false;
+            dap_muted = true;
+            dap_volume = 0x098;
+            if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(true);
             return;
     }
     if (!sendSuccess) {
-        initInProgress = false;
-        if (initSuccessCallback != NULL) initSuccessCallback(false);
+        dap_initInProgress = false;
+        if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(false);
     }
 }
 
@@ -382,38 +444,41 @@ void dap_init_time_callback(uintptr_t context) {
     bool success;
     switch (context) {
         case 0: //reset low, wait 10ms
+            DAP_PDN_N_Clear();
             DAP_RESET_N_Clear();
             SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 1, 10, SYS_TIME_SINGLE);
             break;
-        case 1: //power up, wait 10ms
-            DAP_PDN_N_Set();
+        case 1: //reset up, wait 10ms
+            DAP_RESET_N_Set();
             SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 2, 10, SYS_TIME_SINGLE);
             break;
-        case 2: //reset high, wait 10ms
-            DAP_RESET_N_Set();
+        case 2: //PDN high, wait 10ms
+            DAP_PDN_N_Set();
             SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 3, 10, SYS_TIME_SINGLE);
             break;
         case 3: //reset done: do first writes
+            dap_shutDown = false;
             success = DAP_WriteByteCallback(0x04, 0x02, dap_init_cmd_callback, 0, 0) //syscon2: disable SDOUT
                     && DAP_WriteByteCallback(0x14, 0x24, dap_init_cmd_callback, 0, 0) //input automute: -78dB threshold, 14.9ms delay
                     && DAP_WriteByteCallback(0x19, 0x22, dap_init_cmd_callback, 0, 0) //modulation limit: 97.7% for channels 7, 8
                     && DAP_WriteByteCallback(0x27, 0x3f, dap_init_cmd_callback, 1, 0); //channel shutdown: keep channels 1-6 shut down
             if (!success) {
-                initInProgress = false;
-                if (initSuccessCallback != NULL) initSuccessCallback(false);
+                dap_initInProgress = false;
+                if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(false);
             }
             break;
     }
 }
 
 void DAP_Chip_Init(SUCCESS_CALLBACK callback) {
-    initInProgress = true;
-    initSuccessCallback = callback;
+    dap_initInProgress = true;
+    dap_initSuccessCallback = callback;
     
-    dap_clearQueue(&transferQueue);
+    dap_clearTaskList();
+    dap_sendNextAt = SYS_TIME_CounterGet();
     
     DAP_MUTE_N_Clear(); //mute first, start reset after 100ms
-    SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 0, 100, SYS_TIME_SINGLE);
+    SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 0, 1000, SYS_TIME_SINGLE);
 }
 
 

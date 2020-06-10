@@ -40,25 +40,35 @@ BM83_SAMPLERATE bm83_samplerate = BM83_SR_UNKNOWN;
 uint32_t bm83_samplerate_number = 0;
 BM83_CODEC_STATUS bm83_codec_status = BM83_CODEC_IDLE;
 bool bm83_pairing = false;
+bool bm83_playing = false;
+bool bm83_avrcp_connected = false;
+bool bm83_abs_vol_supported = false;
+uint8_t bm83_abs_vol = 0x00;
+char* bm83_track_title = NULL;
+char* bm83_track_artist = NULL;
+uint32_t bm83_track_length_ms = 0;
+uint32_t bm83_track_pos_ms = 0;
 
 SUCCESS_CALLBACK bm83_init_callback = NULL;
-bool sendQueued = false;
+bool bm83_sendQueued = false;
 
-BM83_STATE_CHANGE_CALLBACK stateChangeCallback = NULL;
+BM83_STATE_CHANGE_CALLBACK bm83_stateChangeCallback = NULL;
 
-DRV_HANDLE drv;
+DRV_HANDLE bm83_drv;
 volatile uint8_t uart_receiveBuffer[UART_RECEIVE_BUFFER_LEN] __attribute__((address(UART_RECEIVE_BUFFER_VIRT_LOC), keep, coherent));
 uint16_t uart_bufferReadPointer = 0;
 
 //command queues
-BM83_COMMAND_QUEUE unsentQueue = { NULL, NULL, 0 };
-BM83_COMMAND_QUEUE sentQueue = { NULL, NULL, 0 };
-BM83_COMMAND_QUEUE ackQueue = { NULL, NULL, 0 };
-BM83_COMMAND_QUEUE responseQueue = { NULL, NULL, 0 };
-BM83_COMMAND_QUEUE unhandledEventQueue = { NULL, NULL, 0 }; //events received that weren't expected by any command
+BM83_COMMAND_QUEUE bm83_unsentQueue = { NULL, NULL, 0 };
+BM83_COMMAND_QUEUE bm83_sentQueue = { NULL, NULL, 0 };
+BM83_COMMAND_QUEUE bm83_ackQueue = { NULL, NULL, 0 };
+BM83_COMMAND_QUEUE bm83_responseQueue = { NULL, NULL, 0 };
+BM83_COMMAND_QUEUE bm83_unhandledEventQueue = { NULL, NULL, 0 }; //events received that weren't expected by any command
 
-uint32_t ackTimeoutTicks; //number of ticks equivalent to 200ms, calculated on init
-uint32_t responseTimeoutTicks; //number of ticks equivalent to 1000ms, calculated on init
+uint32_t bm83_ackTimeoutTicks; //number of ticks equivalent to 200ms, calculated on init
+uint32_t bm83_responseTimeoutTicks; //number of ticks equivalent to 1000ms, calculated on init
+
+static uint32_t bm83_lastSendTick;
 
 /********************/
 /* Helper functions */
@@ -68,6 +78,7 @@ uint32_t responseTimeoutTicks; //number of ticks equivalent to 1000ms, calculate
 BM83_EVENT bm83_getResponseEvent(BM83_COMMAND command) {
     switch (command) {
         case BM83_CMD_Read_BTM_Version: return BM83_EVENT_Read_BTM_Version_Reply;
+        case BM83_CMD_AVC_Vendor_Dependent_Cmd: return BM83_EVENT_AVC_Vendor_Dependent_Response;
         default: return BM83_EVENT_NONE;
     }
 }
@@ -112,6 +123,10 @@ void bm83_freeItem(BM83_QUEUE_ITEM* item) {
     if (item == NULL) return;
     bm83_freeTask(item->task);
     free(item);
+}
+
+inline void bm83_callStateChange(BM83_STATE_CHANGE_TYPE type) {
+    if (bm83_stateChangeCallback) bm83_stateChangeCallback(type);
 }
 
 /******************/
@@ -184,62 +199,67 @@ BM83_QUEUE_ITEM* bm83_findAndRemoveEvent(BM83_COMMAND_QUEUE* queue, BM83_EVENT e
 
 //callback for MFB pulse before command transmission
 void bm83_cmd_time_callback(uintptr_t context) {
-    if (unsentQueue.length == 0 || !sendQueued) return;
+    if (bm83_unsentQueue.length == 0 || !bm83_sendQueued) return;
     
     BM_MFB_Clear();
-    uint16_t itemsLeft;
+    //uint16_t itemsLeft;
     
     //iterate through all items in unsent queue *currently* (not items added back in the loop)
-    for (itemsLeft = unsentQueue.length; itemsLeft > 0; itemsLeft--) {
-        BM83_QUEUE_ITEM* item = bm83_takeFromQueue(&unsentQueue); //get item
-        if (item == NULL) break;
+    //for (itemsLeft = bm83_unsentQueue.length; itemsLeft > 0; itemsLeft--) {
+        BM83_QUEUE_ITEM* item = bm83_takeFromQueue(&bm83_unsentQueue); //get item
+        //if (item == NULL) break;
+        if (item == NULL) {
+            bm83_sendQueued = false;
+            return;
+        }
         BM83_COMMAND_TASK* task = item->task;
-        DRV_USART_WriteBufferAdd(drv, task->data, task->dataLength, &task->sendHandle); //try sending
+        DRV_USART_WriteBufferAdd(bm83_drv, task->data, task->dataLength, &task->sendHandle); //try sending
         if (task->sendHandle == DRV_USART_BUFFER_HANDLE_INVALID) { //if send request failed:
             if (task->previouslyFailed & 1) { //already failed once: callback with error
                 if (task->callback != NULL) task->callback(BM83_RESULT_OTHER_ERROR, NULL, 0, task->callbackContext);
                 bm83_freeItem(item);
             } else { //not failed before: set failed flag, add back to queue
                 task->previouslyFailed |= 1;
-                bm83_addToQueue(&unsentQueue, item);
+                bm83_addToQueue(&bm83_unsentQueue, item);
             }
+            bm83_sendQueued = false;
             return;
         }
         task->previouslyFailed &= 0xfe; //after success: reset send request fail flag
-        bm83_addToQueue(&sentQueue, item); //add item to sent queue
-    }
+        bm83_addToQueue(&bm83_sentQueue, item); //add item to sent queue
+    //}
     
-    sendQueued = false; //send now performed
+    bm83_sendQueued = false; //send now performed
 }
 
 //callback for UART send events
 void bm83_cmd_send_callback(DRV_USART_BUFFER_EVENT event, DRV_USART_BUFFER_HANDLE bufferHandle, uintptr_t context) {
-    if (sentQueue.length == 0 || event == DRV_USART_BUFFER_EVENT_PENDING) return;//ignore "pending" events, queue should not be empty
+    if (bm83_sentQueue.length == 0 || event == DRV_USART_BUFFER_EVENT_PENDING) return;//ignore "pending" events, queue should not be empty
     
     //find sent item with given handle
     BM83_QUEUE_ITEM* prev = NULL;
-    BM83_QUEUE_ITEM* item = sentQueue.head; //start at head
+    BM83_QUEUE_ITEM* item = bm83_sentQueue.head; //start at head
     while (item->task->sendHandle != bufferHandle) { //iterate and look for correct item
         prev = item; //remember previous item
         item = item->next;
         if (item == NULL) return; //this means the item wasn't found: return
     }
     
-    bm83_removeFromQueue(&sentQueue, item, prev); //remove item from sent queue
+    bm83_removeFromQueue(&bm83_sentQueue, item, prev); //remove item from sent queue
     
     BM83_COMMAND_TASK* task = item->task;
     if (event == DRV_USART_BUFFER_EVENT_COMPLETE) { //if transfer successful:
         if (task->command == BM83_CMD_EventAck) return; //if command is EventAck: no further response expected
         task->previouslyFailed &= 0xfc; //clear send error flag
-        task->receiveTimeoutTick = SYS_TIME_CounterGet() + ackTimeoutTicks; //calculate ACK timeout
-        bm83_addToQueue(&ackQueue, item); //add item to waiting-for-ACK queue
+        task->receiveTimeoutTick = SYS_TIME_CounterGet() + bm83_ackTimeoutTicks; //calculate ACK timeout
+        bm83_addToQueue(&bm83_ackQueue, item); //add item to waiting-for-ACK queue
     } else { //if transfer not successful:
         if (task->previouslyFailed & 2) { //already failed once: callback with error
             if (task->callback != NULL) task->callback(BM83_RESULT_OTHER_ERROR, NULL, 0, task->callbackContext);
             bm83_freeItem(item);
         } else { //not failed before: set failed flag, add back to unsent queue
             task->previouslyFailed |= 2;
-            bm83_addToQueue(&unsentQueue, item);
+            bm83_addToQueue(&bm83_unsentQueue, item);
         }
     }
 }
@@ -250,7 +270,70 @@ bool bm83_ack_event(BM83_EVENT event) {
     return BM83_Queue_Command(BM83_CMD_EventAck, id, 1);
 }
 
-void bm83_init_finish_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context); //predef
+bool bm83_request_track_data() {
+    uint8_t params[] = { 0x00, 0x20, 0x00, 0x00, 0x11, 
+                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 
+                         0x00, 0x00, 0x00, 0x01,  0x00, 0x00, 0x00, 0x07 };
+    return BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params, 22);
+}
+
+bool bm83_request_caps() {
+    uint8_t params[] = { 0x00, 0x10, 0x00, 0x00, 0x01, 0x03 };
+    return BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params, 6);
+}
+
+void bm83_register_AVC_notifications(uintptr_t context) {
+    /*uint8_t params1[] = { 0x00, 0x31, 0x00, 0x00, 0x05, 0x02, 0x00, 0x00, 0x00, 0x00 };
+    uint8_t params2[] = { 0x00, 0x31, 0x00, 0x00, 0x05, 0x05, 0x00, 0x00, 0x00, 0x01 };
+    BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params1, 10);
+    BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params2, 10);*/
+    bm83_request_track_data();
+}
+
+bool bm83_init_finish_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context); //predef
+
+bool bm83_handle_AVC_event(uint8_t* buffer, uint16_t length) {
+    if (length < 17 || buffer[5] < 0x0D) return false;
+    uint8_t pduID = buffer[11];
+    uint8_t numAttributes;
+    
+    switch (pduID) {
+        case 0x20: //element attributes
+            numAttributes = buffer[15];
+            if (length < 17 + 8 * numAttributes) return false;
+            int offset = 16;
+            int i;
+            for (i = 0; i < numAttributes; i++) {
+                uint32_t attrID = (buffer[offset] << 24) | (buffer[offset + 1] << 16) | (buffer[offset + 2] << 8) | buffer[offset + 3];
+                uint16_t attrLength = (buffer[offset + 6] << 8) | buffer[offset + 7];
+                offset += 8;
+                switch (attrID) {
+                    
+                }
+                offset += attrLength;
+            }
+            return true;
+        case 0x31: //notification
+            switch(buffer[15]) {
+                case 0x01:
+                    if (length < 18) return false;
+                    bm83_playing = buffer[16] == 0x01;
+                    bm83_callStateChange(BM83_CHANGE_PLAYBACK);
+                    break;
+                case 0x02:
+                    bm83_request_track_data();
+                    break;
+                case 0x05:
+                    if (length < 21) return false;
+                    bm83_track_pos_ms = (buffer[16] << 24) | (buffer[17] << 16) | (buffer[18] << 8) | buffer[19];
+                    if (bm83_track_pos_ms == 0xFFFFFFFF) bm83_track_pos_ms = 0;
+                    bm83_callStateChange(BM83_CHANGE_PLAYBACK);
+                    break;
+            }
+            return true;
+        default: return false;
+    }
+}
 
 //handle an event that happens asynchronously (as in, not as a command response)
 bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length, uint8_t checksum) {
@@ -281,10 +364,18 @@ bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length,
                 case 0x0F:
                     bm83_state = BM83_IDLE;
                     break;
+                case 0x0B:
+                    bm83_avrcp_connected = true;
+                    SYS_TIME_CallbackRegisterMS(bm83_register_AVC_notifications, 0, 500, SYS_TIME_SINGLE);
+                    break;
+                case 0x0C:
+                    bm83_avrcp_connected = false;
+                    bm83_abs_vol_supported = false;
+                    break;
                 default:
                     return true;
             }
-            if (stateChangeCallback != NULL) stateChangeCallback(BM83_CHANGE_STATE);
+            bm83_callStateChange(BM83_CHANGE_STATE);
             return true;
         case BM83_EVENT_Ringtone_Status_Indication: //ringtone status: ignore for now
             return true;
@@ -293,14 +384,57 @@ bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length,
             bm83_samplerate = buffer[4];
             bm83_update_sr();
             bm83_codec_status = buffer[5];
-            if (stateChangeCallback != NULL) stateChangeCallback(BM83_CHANGE_CODEC);
+            bm83_callStateChange(BM83_CHANGE_CODEC);
             return true;
         case BM83_EVENT_Report_BTM_Initial_Status: //initialization
             if (!BM83_Queue_Command_Callback(BM83_CMD_Rx_Buffer_Size, (uint8_t*)bufferSize, 2, bm83_init_finish_callback, NULL)) {
-                if (bm83_init_callback != NULL) bm83_init_callback(false);
+                if (bm83_init_callback) bm83_init_callback(false);
             }
             return true;
+        case BM83_EVENT_Read_Linked_Device_Information_Reply: //here only AVRCP supported function reply
+            if (length < 8 || buffer[5] != 0x03) return false;
+            bm83_abs_vol_supported = buffer[6] >> 1;
+            bm83_callStateChange(BM83_CHANGE_VOLUME);
+            return true;
+        case BM83_EVENT_Report_AVRCP_ABS_Volume_Level: //absolute volume
+            if (length < 7) return false;
+            bm83_abs_vol = buffer[5];
+            bm83_callStateChange(BM83_CHANGE_VOLUME);
+            return true;
+        case BM83_EVENT_AVC_Vendor_Dependent_Response:
+            return bm83_handle_AVC_event(buffer, length);
         default: return false;
+    }
+}
+
+//handle an event that arrived asynchronously, is orphaned (command not acknowledged yet) or rejected by callback
+void bm83_handleOrphanedEvent(BM83_EVENT event, uint8_t* buffer, uint16_t length, uint8_t checksum) {
+    if (!bm83_handle_async_event(event, buffer, length, checksum)) { //check async event handling, if not handled:
+        BM83_COMMAND_TASK* newTask = malloc(sizeof(BM83_COMMAND_TASK)); //allocate task object
+        if (newTask == NULL) return;
+
+        //fill in parameters
+        newTask->command = BM83_CMD_NONE;
+        newTask->expectedResponseEvent = event;
+        newTask->data = malloc(length);
+        if (newTask->data == NULL) {
+            bm83_freeTask(newTask);
+            return;
+        }
+        newTask->dataLength = length;
+        newTask->callback = NULL;
+        newTask->callbackContext = 0;
+        newTask->previouslyFailed = checksum; //reuse for checksum value
+        newTask->receiveTimeoutTick = SYS_TIME_CounterGet() + bm83_responseTimeoutTicks;
+        memcpy(newTask->data, buffer, length); //copy data
+
+        BM83_QUEUE_ITEM* newItem = malloc(sizeof(BM83_QUEUE_ITEM)); //allocate queue item
+        if (newItem == NULL) {
+            bm83_freeTask(newTask);
+            return;
+        }
+        newItem->task = newTask;
+        bm83_addToQueue(&bm83_unhandledEventQueue, newItem); //add item to unhandled event queue
     }
 }
 
@@ -310,19 +444,19 @@ void bm83_handle_event(uint8_t* buffer, uint16_t length, uint8_t checksum) {
     BM83_EVENT event = buffer[3];
     
     if (event == BM83_EVENT_CommandAck) { //ACK event
-        if (length != 7 || checksum != 0 || ackQueue.length == 0) return;
+        if (length != 7 || checksum != 0 || bm83_ackQueue.length == 0) return;
         BM83_COMMAND ackCmd = buffer[4];
         
         //find item waiting for ACK with this code
         BM83_QUEUE_ITEM* prev = NULL;
-        BM83_QUEUE_ITEM* item = ackQueue.head; //start at head
+        BM83_QUEUE_ITEM* item = bm83_ackQueue.head; //start at head
         while (item->task->command != ackCmd) { //iterate and look for correct item
             prev = item; //remember previous item
             item = item->next;
             if (item == NULL) return; //this means the item wasn't found: return
         }
         
-        bm83_removeFromQueue(&ackQueue, item, prev); //remove item from queue
+        bm83_removeFromQueue(&bm83_ackQueue, item, prev); //remove item from queue
         
         BM83_COMMAND_TASK* task = item->task;
         if (buffer[5] == 0) { //status 0: command complete (ACK)
@@ -330,38 +464,16 @@ void bm83_handle_event(uint8_t* buffer, uint16_t length, uint8_t checksum) {
                 if (task->callback != NULL) task->callback(BM83_RESULT_SUCCESS, NULL, 0, task->callbackContext);
                 bm83_freeItem(item);
             } else { //response event expected: add to corresponsing queue
-                task->receiveTimeoutTick = SYS_TIME_CounterGet() + responseTimeoutTicks;
-                bm83_addToQueue(&responseQueue, item);
+                task->receiveTimeoutTick = SYS_TIME_CounterGet() + bm83_responseTimeoutTicks;
+                bm83_addToQueue(&bm83_responseQueue, item);
             }
         } else { //any other status: NACK
             if (task->callback != NULL) task->callback(BM83_RESULT_NACK, NULL, 0, task->callbackContext);
             bm83_freeItem(item);
         }
     } else { //other event (not ACK)
-        BM83_QUEUE_ITEM* item = bm83_findAndRemoveEvent(&responseQueue, event); //find command expecting event
-        if (item == NULL) { //no command expecting event found:
-            if (!bm83_handle_async_event(event, buffer, length, checksum)) { //check async event handling, if not handled:
-                BM83_COMMAND_TASK* newTask = malloc(sizeof(BM83_COMMAND_TASK)); //allocate task object
-                if (newTask == NULL) return;
-
-                //fill in parameters
-                newTask->command = BM83_CMD_NONE;
-                newTask->expectedResponseEvent = event;
-                newTask->data = malloc(length);
-                if (newTask->data == NULL) return;
-                newTask->dataLength = length;
-                newTask->callback = NULL;
-                newTask->callbackContext = 0;
-                newTask->previouslyFailed = checksum; //reuse for checksum value
-                newTask->receiveTimeoutTick = SYS_TIME_CounterGet() + responseTimeoutTicks;
-                memcpy(newTask->data, buffer, length); //copy data
-
-                BM83_QUEUE_ITEM* newItem = malloc(sizeof(BM83_QUEUE_ITEM)); //allocate queue item
-                if (newItem == NULL) return;
-                newItem->task = newTask;
-                bm83_addToQueue(&unhandledEventQueue, newItem); //add item to unhandled event queue
-            }
-        } else if (item->task->callback != NULL) { //expecting command found and has callback:
+        BM83_QUEUE_ITEM* item = bm83_findAndRemoveEvent(&bm83_responseQueue, event); //find command expecting event
+        if (item && item->task->callback) { //expecting command found and has callback:
             BM83_COMMAND_TASK* task = item->task;
             
             uint8_t* responseData = malloc(length);
@@ -371,11 +483,17 @@ void bm83_handle_event(uint8_t* buffer, uint16_t length, uint8_t checksum) {
             }
             memcpy(responseData, buffer, length);
             
-            if (checksum == 0) task->callback(BM83_RESULT_SUCCESS, responseData, length, task->callbackContext);
-            else task->callback(BM83_RESULT_CHECKSUM_MISMATCH, responseData, length, task->callbackContext);
-            bm83_freeItem(item);
-            free(responseData);
-        }
+            bool handled;
+            if (checksum == 0) handled = task->callback(BM83_RESULT_SUCCESS, responseData, length, task->callbackContext);
+            else handled = task->callback(BM83_RESULT_CHECKSUM_MISMATCH, responseData, length, task->callbackContext);
+            if (handled) {
+                bm83_freeItem(item);
+                free(responseData);
+            } else {
+                bm83_addToQueue(&bm83_responseQueue, item);
+                bm83_handleOrphanedEvent(event, buffer, length, checksum);
+            }
+        } else bm83_handleOrphanedEvent(event, buffer, length, checksum);
         bm83_ack_event(event); //send event ACK
     }
 }
@@ -417,7 +535,7 @@ bool BM83_Queue_Command_Callback(BM83_COMMAND command, uint8_t* params, uint16_t
         return false;
     }
     item->task = task;
-    bm83_addToQueue(&unsentQueue, item); //add item to unsent queue
+    bm83_addToQueue(&bm83_unsentQueue, item); //add item to unsent queue
     
     return true;
 }
@@ -473,18 +591,18 @@ void BM83_Tasks() {
     
     //iterate through commands waiting for ack and resend/timeout if necessary
     BM83_QUEUE_ITEM* prev = NULL;
-    BM83_QUEUE_ITEM* item = ackQueue.head;
+    BM83_QUEUE_ITEM* item = bm83_ackQueue.head;
     while (item != NULL) {
         BM83_COMMAND_TASK* task = item->task;
         
         if (tick - task->receiveTimeoutTick < UART_TIMEOUT_MAX_DIFF) { //task timed out:
             if (task->previouslyFailed & 4) { //previously failed on ACK: callback and discard
                 if (task->callback != NULL) task->callback(BM83_RESULT_TIMEOUT, NULL, 0, task->callbackContext);
-                bm83_removeFromQueue(&ackQueue, item, prev);
+                bm83_removeFromQueue(&bm83_ackQueue, item, prev);
                 bm83_freeItem(item);
             } else { //not failed before: set failed flag, add back to unsent queue
                 task->previouslyFailed |= 4;
-                bm83_addToQueue(&unsentQueue, item);
+                bm83_addToQueue(&bm83_unsentQueue, item);
             }
         }
         
@@ -494,14 +612,14 @@ void BM83_Tasks() {
     
     //iterate through unhandled events and process or discard them
     BM83_QUEUE_ITEM* prevEvent = NULL;
-    BM83_QUEUE_ITEM* eventItem = unhandledEventQueue.head;
+    BM83_QUEUE_ITEM* eventItem = bm83_unhandledEventQueue.head;
     while (eventItem != NULL) {
         BM83_COMMAND_TASK* eventTask = eventItem->task;
-        BM83_QUEUE_ITEM* cmdItem = bm83_findAndRemoveEvent(&responseQueue, eventTask->expectedResponseEvent); //find+remove expecting command
+        BM83_QUEUE_ITEM* cmdItem = bm83_findAndRemoveEvent(&bm83_responseQueue, eventTask->expectedResponseEvent); //find+remove expecting command
         
         if (cmdItem == NULL) { //no expecting command found:
             if (tick - eventTask->receiveTimeoutTick < UART_TIMEOUT_MAX_DIFF) { //if timed out: discard
-                bm83_removeFromQueue(&unhandledEventQueue, eventItem, prevEvent);
+                bm83_removeFromQueue(&bm83_unhandledEventQueue, eventItem, prevEvent);
                 bm83_freeItem(eventItem);
             }
         } else if (cmdItem->task->callback != NULL) { //expecting command found and has callback
@@ -513,7 +631,7 @@ void BM83_Tasks() {
             bm83_freeItem(cmdItem);
             
             //remove and free event item but keep event data
-            bm83_removeFromQueue(&unhandledEventQueue, eventItem, prevEvent);
+            bm83_removeFromQueue(&bm83_unhandledEventQueue, eventItem, prevEvent);
             free(eventTask);
             free(eventItem);
         }
@@ -524,13 +642,13 @@ void BM83_Tasks() {
     
     //iterate through commands waiting for response and timeout if necessary
     prev = NULL;
-    item = responseQueue.head;
+    item = bm83_responseQueue.head;
     while (item != NULL) {
         BM83_COMMAND_TASK* task = item->task;
         
         if (tick - task->receiveTimeoutTick < UART_TIMEOUT_MAX_DIFF) { //task timed out: callback and timeout
             if (task->callback != NULL) task->callback(BM83_RESULT_TIMEOUT, NULL, 0, task->callbackContext);
-            bm83_removeFromQueue(&responseQueue, item, prev);
+            bm83_removeFromQueue(&bm83_responseQueue, item, prev);
             bm83_freeItem(item);
         }
         
@@ -538,16 +656,21 @@ void BM83_Tasks() {
         item = item->next;
     }
     
+    if (SYS_TIME_CounterGet() - bm83_lastSendTick - bm83_ackTimeoutTicks < UART_TIMEOUT_MAX_DIFF) { //time out stuck send queue
+        bm83_sendQueued = false;
+    }
+    
     //send new data
-    if (unsentQueue.length > 0 && !sendQueued) { //if items need to be sent: set MFB, send after 3ms
+    if (bm83_unsentQueue.length > 0 && !bm83_sendQueued) { //if items need to be sent: set MFB, send after 3ms
         BM_MFB_Set();
+        bm83_lastSendTick = SYS_TIME_CounterGet();
         SYS_TIME_CallbackRegisterMS(bm83_cmd_time_callback, 0, 3, SYS_TIME_SINGLE);
-        sendQueued = true; //prevent more calls before timeout
+        bm83_sendQueued = true; //prevent more calls before timeout
     }
 }
 
 void BM83_SetStateChangeCallback(BM83_STATE_CHANGE_CALLBACK callback) {
-    stateChangeCallback = callback;
+    bm83_stateChangeCallback = callback;
 }
 
 /******************************/
@@ -555,28 +678,30 @@ void BM83_SetStateChangeCallback(BM83_STATE_CHANGE_CALLBACK callback) {
 /******************************/
 
 //final callback for simple action sequence: call back success/failure
-void bm83_action_final_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
-    if (context == NULL) return;
+bool bm83_action_final_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
+    if (context == NULL) return true;
     if (result == BM83_RESULT_SUCCESS) {
         ((SUCCESS_CALLBACK)context)(true);
     } else {
         ((SUCCESS_CALLBACK)context)(false);
     }
+    return true;
 }
 
 //simple MMI action call
 inline void bm83_MMI_action(const uint8_t* action, BM83_COMMAND_CALLBACK cmd_cb, SUCCESS_CALLBACK suc_cb) {
     if (!BM83_Queue_Command_Callback(BM83_CMD_MMI_Action, (uint8_t*)action, 2, cmd_cb, (uintptr_t)suc_cb)) {
-        if (suc_cb != NULL) suc_cb(false);
+        if (suc_cb) suc_cb(false);
     }
 }
 
 //first callback for off sequence: release on button or call back failure
-void bm83_pwrOn_first_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
+bool bm83_pwrOn_first_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
     const uint8_t action[] = { 0x00, 0x52 };
     SUCCESS_CALLBACK cb = (SUCCESS_CALLBACK)context;
     if (result == BM83_RESULT_SUCCESS) bm83_MMI_action(action, bm83_action_final_callback, cb);
-    else if (cb != NULL) cb(false);
+    else if (cb) cb(false);
+    return true;
 }
 
 //power on module: press on button
@@ -586,11 +711,12 @@ void BM83_PowerOn(SUCCESS_CALLBACK callback) {
 }
 
 //first callback for off sequence: release off button or call back failure
-void bm83_pwrOff_first_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
+bool bm83_pwrOff_first_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
     const uint8_t action[] = { 0x00, 0x54 };
     SUCCESS_CALLBACK cb = (SUCCESS_CALLBACK)context;
     if (result == BM83_RESULT_SUCCESS) bm83_MMI_action(action, bm83_action_final_callback, cb);
     else if (cb != NULL) cb(false);
+    return true;
 }
 
 //power off module: press off button
@@ -609,24 +735,65 @@ void BM83_ExitPairing(SUCCESS_CALLBACK callback) {
     bm83_MMI_action(action, bm83_action_final_callback, callback);
 }
 
+void BM83_DisconnectLink(SUCCESS_CALLBACK callback) {
+    uint8_t params[] = { 0x3E };
+    if (!BM83_Queue_Command_Callback(BM83_CMD_Disconnect, params, 1, bm83_action_final_callback, (uintptr_t)callback)) {
+        if (callback) callback(false);
+    }
+}
+
+void BM83_SetAbsVolume(uint8_t absVol, SUCCESS_CALLBACK callback) {
+    if (!bm83_abs_vol_supported || absVol > 0x7F) {
+        if (callback) callback(false);
+        return;
+    }
+    uint8_t params[] = { 0x00, 0x01, 0x04, absVol, 0x00, 0x00 };
+    if (!BM83_Queue_Command_Callback(BM83_CMD_Set_Overall_Gain, params, 6, bm83_action_final_callback, (uintptr_t)callback)) {
+        if (callback) callback(false);
+        return;
+    }
+    bm83_abs_vol = absVol;
+}
+
+void BM83_PlayPause(SUCCESS_CALLBACK callback) {
+    uint8_t params[] = { 0x00, 0x07 };
+    if (!BM83_Queue_Command_Callback(BM83_CMD_Music_Control, params, 2, bm83_action_final_callback, (uintptr_t)callback)) {
+        if (callback) callback(false);
+    }
+}
+
+void BM83_NextTrack(SUCCESS_CALLBACK callback) {
+    uint8_t params[] = { 0x00, 0x09 };
+    if (!BM83_Queue_Command_Callback(BM83_CMD_Music_Control, params, 2, bm83_action_final_callback, (uintptr_t)callback)) {
+        if (callback) callback(false);
+    }
+}
+
+void BM83_PrevTrack(SUCCESS_CALLBACK callback) {
+    uint8_t params[] = { 0x00, 0x0A };
+    if (!BM83_Queue_Command_Callback(BM83_CMD_Music_Control, params, 2, bm83_action_final_callback, (uintptr_t)callback)) {
+        if (callback) callback(false);
+    }
+}
+
 /****************************/
 /* Initialization functions */
 /****************************/
 
 //callback for initialization finish
-void bm83_init_finish_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
+bool bm83_init_finish_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context) {
     if (result == BM83_RESULT_SUCCESS) { //successfully set buffer size: go to off state, callback with success
         bm83_state = BM83_OFF;
         if (bm83_init_callback != NULL) bm83_init_callback(true);
+        bm83_callStateChange(BM83_CHANGE_STATE);
     } else { //failed: callback with fail
         if (bm83_init_callback != NULL) bm83_init_callback(false);
     }
+    return true;
 }
 
 //callback for init timer events
-void bm83_init_time_callback(uintptr_t context) {
-    //const uint8_t bufferSize[] = { 0x04, 0x00 };
-    
+void bm83_init_time_callback(uintptr_t context) {    
     switch (context) {
         case 0: //after reset hold: set MFB, wait 20ms
         {
@@ -643,9 +810,6 @@ void bm83_init_time_callback(uintptr_t context) {
         case 2: //after init wait: clear MFB
         {
             BM_MFB_Clear();
-            //if (!BM83_Queue_Command_Callback(BM83_CMD_Rx_Buffer_Size, (uint8_t*)bufferSize, 2, bm83_init_finish_callback, NULL)) {
-            //    if (bm83_init_callback != NULL) bm83_init_callback(false);
-            //}
             break;
         }
     }
@@ -672,21 +836,21 @@ void BM83_IO_Init() {
     
     uart_bufferReadPointer = 0; //reset buffer read pointer
     
-    drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE); //open driver
-    DRV_USART_BufferEventHandlerSet(drv, bm83_cmd_send_callback, 0); //set event handler
+    bm83_drv = DRV_USART_Open(DRV_USART_INDEX_0, DRV_IO_INTENT_EXCLUSIVE); //open driver
+    DRV_USART_BufferEventHandlerSet(bm83_drv, bm83_cmd_send_callback, 0); //set event handler
     
-    ackTimeoutTicks = SYS_TIME_MSToCount(200); //calculate ACK and response timeout ticks
-    responseTimeoutTicks = SYS_TIME_MSToCount(1000);
+    bm83_ackTimeoutTicks = SYS_TIME_MSToCount(200); //calculate ACK and response timeout ticks
+    bm83_responseTimeoutTicks = SYS_TIME_MSToCount(1000);
 }
 
 //initialization of module and UART protocol
 void BM83_Module_Init(SUCCESS_CALLBACK callback) {
     bm83_state = BM83_NOT_INITIALIZED; //reset state
-    bm83_clearQueue(&unsentQueue); //clear all queues
-    bm83_clearQueue(&sentQueue);
-    bm83_clearQueue(&ackQueue);
-    bm83_clearQueue(&responseQueue);
-    bm83_clearQueue(&unhandledEventQueue);
+    bm83_clearQueue(&bm83_unsentQueue); //clear all queues
+    bm83_clearQueue(&bm83_sentQueue);
+    bm83_clearQueue(&bm83_ackQueue);
+    bm83_clearQueue(&bm83_responseQueue);
+    bm83_clearQueue(&bm83_unhandledEventQueue);
     bm83_init_callback = callback;
     
     BM_MFB_Clear();

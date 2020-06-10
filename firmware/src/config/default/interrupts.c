@@ -91,13 +91,13 @@ void __ISR(_TIMER_2_VECTOR, ipl1AUTO) TIMER_2_Handler (void)
     TIMER_2_InterruptHandler();
 }
 
-void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
+/*void __ISR(_EXTERNAL_4_VECTOR, ipl1AUTO) EXTERNAL_4_Handler (void)
 {
     #ifdef UI_TOUCH
     UI_InterruptHandler();
     #endif
     SYS_INT_SourceStatusClear(INT_SOURCE_EXTERNAL_4);
-}
+}*/
 
 void __ISR(_ADC_DF1_VECTOR, ipl1AUTO) ADC_DF1_Handler (void)
 {

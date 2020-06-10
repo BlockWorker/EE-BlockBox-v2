@@ -9,6 +9,7 @@
 /* FT8xx Memory Commands - used with FT8_memWritexx and FT8_memReadxx */
 #define MEM_WRITE	0x80	/* FT8xx Host Memory Write */
 #define MEM_READ	0x00	/* FT8xx Host Memory Read */
+#define FT_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
 
 typedef enum uint8_t {
     CALLBACK_VOID = 0,
@@ -27,6 +28,7 @@ typedef struct {
     bool keepData;
     void* callback;
     uintptr_t context;
+    uint32_t timeoutTick;
 } SPI_COMMAND_DATA;
 
 typedef struct spi_cb_item {
@@ -46,43 +48,47 @@ typedef struct {
     uintptr_t context;
 } VOIDCB_DATA;
 
-volatile uint16_t cmdOffset = 0x0000; /* used to navigate command ring buffer */
+static volatile uint16_t ft_cmdOffset = 0x0000; /* used to navigate command ring buffer */
 
-uint8_t cmdQueue[4096] = {0};
-uint16_t cmdQueueLength = 0x0000;
+static uint8_t ft_cmdQueue[4096] = {0};
+static uint16_t ft_cmdQueueLength = 0x0000;
 
-#define cmdQueueSpace (4096 - cmdQueueLength)
+#define ft_cmdQueueSpace (4096 - ft_cmdQueueLength)
 
-DRV_HANDLE drv;
-SUCCESS_CALLBACK ft_initCallback;
-bool ft_sending = false;
-bool ft_sendFailed = false;
+static DRV_HANDLE ft_drv;
+static SUCCESS_CALLBACK ft_initCallback;
+//static bool ft_sending = false;
+//static bool ft_sendFailed = false;
+static uint32_t ft_sendNextAt;
 
-SPI_LIST cbList = { NULL, NULL, 0 };
-SPI_LIST sendList = { NULL, NULL, 0 };
+static uint32_t ft_sendPause;
+static uint32_t ft_sendTimeout;
+
+static SPI_LIST ft_cbList = { NULL, NULL, 0 };
+static SPI_LIST ft_sendList = { NULL, NULL, 0 };
 
 /********************/
 /* Helper functions */
 /********************/
 
-void queue8(uint8_t data) {
-    cmdQueue[cmdQueueLength++] = data;
+void ft_queue8(uint8_t data) {
+    ft_cmdQueue[ft_cmdQueueLength++] = data;
 }
 
-void queue16(uint16_t data) {
-    cmdQueue[cmdQueueLength++] = (uint8_t)data;
-    cmdQueue[cmdQueueLength++] = (uint8_t)(data >> 8);
+void ft_queue16(uint16_t data) {
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)data;
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)(data >> 8);
 }
 
-void queue32(uint32_t data) {
-    cmdQueue[cmdQueueLength++] = (uint8_t)data;
-    cmdQueue[cmdQueueLength++] = (uint8_t)(data >> 8);
-    cmdQueue[cmdQueueLength++] = (uint8_t)(data >> 16);
-    cmdQueue[cmdQueueLength++] = (uint8_t)(data >> 24);
+void ft_queue32(uint32_t data) {
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)data;
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)(data >> 8);
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)(data >> 16);
+    ft_cmdQueue[ft_cmdQueueLength++] = (uint8_t)(data >> 24);
 }
 
-void alignQueue() {
-    while (cmdQueueLength % 4 != 0) cmdQueue[cmdQueueLength++] = 0;
+void ft_alignQueue() {
+    while (ft_cmdQueueLength % 4 != 0) ft_cmdQueue[ft_cmdQueueLength++] = 0;
 }
 
 void ft_freeCbData(SPI_COMMAND_DATA* cmd) {
@@ -150,52 +156,84 @@ void ft_clearList(SPI_LIST* list) {
 /* Transfer functions */
 /**********************/
 
-void ft_sendNextTimed(uintptr_t context) {
-    SPI_LIST_ITEM* item = ft_takeFromList(&sendList);
+/*void ft_sendNextTimed(uintptr_t context) {
+    SPI_LIST_ITEM* item = ft_takeFromList(&ft_sendList);
     if (item == NULL) {
         ft_sending = false;
         return;
     }
     SPI_COMMAND_DATA* cmd = item->data;
     LCD_CS_N_Clear();
-    DRV_SPI_WriteReadTransferAdd(drv, cmd->sendBuf, cmd->sendLength, cmd->data, cmd->dataLength, &cmd->handle);
+    DRV_SPI_WriteReadTransferAdd(ft_drv, cmd->sendBuf, cmd->sendLength, cmd->data, cmd->dataLength, &cmd->handle);
     if (cmd->handle == DRV_SPI_TRANSFER_HANDLE_INVALID) {
         ft_sending = false;
         return;
     }
-    ft_addToList(&cbList, item);
-}
+    ft_addToList(&ft_cbList, item);
+}*/
 
-void ft_sendNext() {
+/*void ft_sendNext() {
     ft_sending = true;
     if (SYS_TIME_CallbackRegisterUS(ft_sendNextTimed, 0, 100, SYS_TIME_SINGLE) == SYS_TIME_HANDLE_INVALID) {
         ft_sendFailed = true;
     }
-}
+}*/
 
 void FT8_Tasks() {
-    if (ft_sendFailed) {
+    /*if (ft_sendFailed) {
         ft_sendFailed = false;
         ft_sendNext();
+    }*/
+    uint32_t tick = SYS_TIME_CounterGet();
+    
+    SPI_LIST_ITEM* prev = NULL;
+    SPI_LIST_ITEM* item = ft_cbList.head;
+    while (item != NULL) {
+        SPI_COMMAND_DATA* cmd = item->data;
+        if (tick - cmd->timeoutTick < FT_TIMEOUT_MAX_DIFF) { //if callback timed out:
+            ft_removeFromList(&ft_cbList, item, prev); //remove from callback
+            ft_addToList(&ft_sendList, item); //resend
+        }
+        prev = item;
+        item = item->next;
+    }
+    
+    if (tick - ft_sendNextAt < FT_TIMEOUT_MAX_DIFF) {
+        item = ft_takeFromList(&ft_sendList);
+        if (item == NULL) {
+            ft_sendNextAt = tick;
+            return;
+        }
+        SPI_COMMAND_DATA* cmd = item->data;
+        LCD_CS_N_Clear();
+        DRV_SPI_WriteReadTransferAdd(ft_drv, cmd->sendBuf, cmd->sendLength, cmd->data, cmd->dataLength, &cmd->handle);
+        if (cmd->handle == DRV_SPI_TRANSFER_HANDLE_INVALID) {
+            LCD_CS_N_Set();
+            ft_sendNextAt = tick;
+            return;
+        }
+        cmd->timeoutTick = tick + ft_sendTimeout;
+        ft_addToList(&ft_cbList, item);
+        ft_sendNextAt = tick + ft_sendTimeout;
     }
 }
 
 void SPIEventHandler(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE bufferHandle, uintptr_t context) {
-    if (event == DRV_SPI_TRANSFER_EVENT_PENDING || cbList.length == 0) return; //ignore pending events and unexpected events
+    if (event == DRV_SPI_TRANSFER_EVENT_PENDING || ft_cbList.length == 0) return; //ignore pending events and unexpected events
     
     LCD_CS_N_Set();
-    ft_sendNext();
+    //ft_sendNext();
     
     //search for corresponding callback info
     SPI_LIST_ITEM* prev = NULL;
-    SPI_LIST_ITEM* item = cbList.head;
+    SPI_LIST_ITEM* item = ft_cbList.head;
     while (item->data->handle != bufferHandle) {
         prev = item;
         item = item->next;
         if (item == NULL) return; //not found: ignore event
     }
     
-    ft_removeFromList(&cbList, item, prev); //remove callback from list
+    ft_removeFromList(&ft_cbList, item, prev); //remove callback from list
     
     //callback (if present)
     bool success = event == DRV_SPI_TRANSFER_EVENT_COMPLETE;
@@ -226,6 +264,7 @@ void SPIEventHandler(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE buffe
                 break;
         }
     }
+    ft_sendNextAt = SYS_TIME_CounterGet() + ft_sendPause;
     ft_freeItem(item); //free memory of removed item
 }
 
@@ -247,14 +286,14 @@ int ft_genWrite(uint8_t* buf, size_t length, VOID_CALLBACK cb, uintptr_t context
     item->data = cbd;
     
     if (wait) {
-        ft_addToList(&sendList, item);
-        if (!ft_sending) ft_sendNext();
+        ft_addToList(&ft_sendList, item);
+        //if (!ft_sending) ft_sendNext();
     } else {
         DRV_SPI_TRANSFER_HANDLE handle;
-        DRV_SPI_WriteTransferAdd(drv, buf, length, &handle);
+        DRV_SPI_WriteTransferAdd(ft_drv, buf, length, &handle);
         if (handle == DRV_SPI_TRANSFER_HANDLE_INVALID) return -1;
-        ft_addToList(&cbList, item);
-        ft_sending = true;
+        ft_addToList(&ft_cbList, item);
+        //ft_sending = true;
     }
     return 0;
 }
@@ -277,8 +316,8 @@ int ft_genRead(uint8_t* buf, size_t length, size_t dataLength, CALLBACK_TYPE cbT
     if (item == NULL) return -2;
     item->data = cbd;
     
-    ft_addToList(&sendList, item);
-    if (!ft_sending) ft_sendNext();
+    ft_addToList(&ft_sendList, item);
+    //if (!ft_sending) ft_sendNext();
     return 0;
 }
 
@@ -296,7 +335,7 @@ int FT8_cmdWrite(uint8_t cmd, uint8_t arg) {
     return FT8_cmdWriteC(cmd, arg, NULL, NULL);
 }
 
-int FT8_memSendAddrRaw(uint32_t ftAddress, bool read) {
+/*int FT8_memSendAddrRaw(uint32_t ftAddress, bool read) {
     uint8_t* buf = malloc(3);
     if (buf == NULL) return -2;
     buf[0] = (uint8_t) (ftAddress >> 16) | (read ? MEM_READ : MEM_WRITE);
@@ -304,7 +343,7 @@ int FT8_memSendAddrRaw(uint32_t ftAddress, bool read) {
     buf[2] = (uint8_t) ftAddress;
     
     return ft_genWrite(buf, 3, NULL, NULL, true);
-}
+}*/
 
 int FT8_memRead8(uint32_t ftAddress, INT8_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(3);
@@ -358,8 +397,8 @@ int FT8_memReadBuffer(uint32_t ftAddress, uint8_t* buffer, uint32_t length, VOID
     if (item == NULL) return -2;
     item->data = cbd;
     
-    ft_addToList(&sendList, item);
-    if (!ft_sending) ft_sendNext();
+    ft_addToList(&ft_sendList, item);
+    //if (!ft_sending) ft_sendNext();
     return 0;
 }
 
@@ -378,7 +417,7 @@ int FT8_memWrite8(uint32_t ftAddress, uint8_t ftData8) {
     return FT8_memWrite8C(ftAddress, ftData8, NULL, NULL);
 }
 
-int FT8_memWrite8RawC(uint8_t ftData8, VOID_CALLBACK cb, uintptr_t context) {
+/*int FT8_memWrite8RawC(uint8_t ftData8, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(1);
     if (buf == NULL) return -2;
     buf[0] = ftData8;
@@ -388,7 +427,7 @@ int FT8_memWrite8RawC(uint8_t ftData8, VOID_CALLBACK cb, uintptr_t context) {
 
 int FT8_memWrite8Raw(uint8_t ftData8) {
     return FT8_memWrite8RawC(ftData8, NULL, NULL);
-}
+}*/
 
 int FT8_memWrite16C(uint32_t ftAddress, uint16_t ftData16, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(5);
@@ -406,7 +445,7 @@ int FT8_memWrite16(uint32_t ftAddress, uint16_t ftData16) {
     return FT8_memWrite16C(ftAddress, ftData16, NULL, NULL);
 }
 
-int FT8_memWrite16RawC(uint16_t ftData16, VOID_CALLBACK cb, uintptr_t context) {
+/*int FT8_memWrite16RawC(uint16_t ftData16, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(2);
     if (buf == NULL) return -2;
     buf[0] = (uint8_t) ftData16;
@@ -417,7 +456,7 @@ int FT8_memWrite16RawC(uint16_t ftData16, VOID_CALLBACK cb, uintptr_t context) {
 
 int FT8_memWrite16Raw(uint16_t ftData16) {
     return FT8_memWrite16RawC(ftData16, NULL, NULL);
-}
+}*/
 
 int FT8_memWrite32C(uint32_t ftAddress, uint32_t ftData32, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(7);
@@ -437,7 +476,7 @@ int FT8_memWrite32(uint32_t ftAddress, uint32_t ftData32) {
     return FT8_memWrite32C(ftAddress, ftData32, NULL, NULL);
 }
 
-int FT8_memWrite32RawC(uint32_t ftData32, VOID_CALLBACK cb, uintptr_t context) {
+/*int FT8_memWrite32RawC(uint32_t ftData32, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(4);
     if (buf == NULL) return -2;
     buf[0] = (uint8_t) ftData32;
@@ -450,7 +489,7 @@ int FT8_memWrite32RawC(uint32_t ftData32, VOID_CALLBACK cb, uintptr_t context) {
 
 int FT8_memWrite32Raw(uint32_t ftData32) {
     return FT8_memWrite32RawC(ftData32, NULL, NULL);
-}
+}*/
 
 int FT8_memWriteBufferC(uint32_t ftAddress, uint8_t* buffer, uint32_t length, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(length + 3);
@@ -467,7 +506,7 @@ int FT8_memWriteBuffer(uint32_t ftAddress, uint8_t* buffer, uint32_t length) {
     return FT8_memWriteBufferC(ftAddress, buffer, length, NULL, NULL);
 }
 
-int FT8_memWriteBufferRawC(uint8_t* buffer, uint32_t length, VOID_CALLBACK cb, uintptr_t context) {
+/*int FT8_memWriteBufferRawC(uint8_t* buffer, uint32_t length, VOID_CALLBACK cb, uintptr_t context) {
     uint8_t* buf = malloc(length);
     if (buf == NULL) return -2;
     memcpy(buf, buffer, length);
@@ -477,7 +516,7 @@ int FT8_memWriteBufferRawC(uint8_t* buffer, uint32_t length, VOID_CALLBACK cb, u
 
 int FT8_memWriteBufferRaw(uint8_t* buffer, uint32_t length) {
     return FT8_memWriteBufferRawC(buffer, length, NULL, NULL);
-}
+}*/
 
 
 /*int FT8_memWrite_flash_buffer(uint32_t ftAddress, const uint8_t *data, uint16_t len)
@@ -503,27 +542,27 @@ int FT8_memWriteBufferRaw(uint8_t* buffer, uint32_t length) {
 /* Command functions */
 /*********************/
 
-void busyReadCallback(bool success, uint16_t data, uintptr_t context); //predef
+void ft_busyReadCallback(bool success, uint16_t data, uintptr_t context); //predef
 
-void busyTimerCallback(uintptr_t context) {
-    FT8_memRead16(REG_CMD_READ, busyReadCallback, context);
+void ft_busyTimerCallback(uintptr_t context) {
+    FT8_memRead16(REG_CMD_READ, ft_busyReadCallback, context);
 }
 
-void busyReadCallback(bool success, uint16_t data, uintptr_t context) {
+void ft_busyReadCallback(bool success, uint16_t data, uintptr_t context) {
     if (data == 0xFFF) {
         FT8_memWrite8(REG_CPURESET, 1);
         FT8_memWrite16(REG_CMD_READ, 0);
         FT8_memWrite16(REG_CMD_WRITE, 0);
-        cmdOffset = 0;
+        ft_cmdOffset = 0;
         FT8_memWrite8(REG_CPURESET, 0);
-        SYS_TIME_CallbackRegisterMS(busyTimerCallback, context, 10, SYS_TIME_SINGLE);
-    } else if (data == cmdOffset) {
+        SYS_TIME_CallbackRegisterMS(ft_busyTimerCallback, context, 10, SYS_TIME_SINGLE);
+    } else if (data == ft_cmdOffset) {
         VOIDCB_DATA* cb = (VOIDCB_DATA*)context;
         cb->callback(success, cb->context);
         free(cb);
     } else {
-        if (SYS_TIME_CallbackRegisterMS(busyTimerCallback, context, 5, SYS_TIME_SINGLE) == SYS_TIME_HANDLE_INVALID) {
-            busyTimerCallback(context);
+        if (SYS_TIME_CallbackRegisterMS(ft_busyTimerCallback, context, 5, SYS_TIME_SINGLE) == SYS_TIME_HANDLE_INVALID) {
+            ft_busyTimerCallback(context);
         }
     }
 }
@@ -533,7 +572,7 @@ int FT8_busy(VOID_CALLBACK cb, uintptr_t context) {
     if (cbd == NULL) return -2;
     cbd->callback = cb;
     cbd->context = context;
-    return FT8_memRead16(REG_CMD_READ, busyReadCallback, (uintptr_t)cbd); /* read the graphics processor read pointer */
+    return FT8_memRead16(REG_CMD_READ, ft_busyReadCallback, (uintptr_t)cbd); /* read the graphics processor read pointer */
 }
 
 int FT8_get_touch_tag(INT32_CALLBACK cb, uintptr_t context) {
@@ -541,18 +580,18 @@ int FT8_get_touch_tag(INT32_CALLBACK cb, uintptr_t context) {
 }
 
 void FT8_inc_cmdoffset(uint16_t increment) {
-    cmdOffset += increment;
-    cmdOffset &= 0x0fff;
+    ft_cmdOffset += increment;
+    ft_cmdOffset &= 0x0fff;
 }
 
 /* order the command co-processor to start processing its FIFO queue and call cb on completion */
 int FT8_cmd_execute(VOID_CALLBACK cb, uintptr_t context) {
-    if (cmdQueueLength == 0) return 0;
-    int r = FT8_memWriteBuffer(FT8_RAM_CMD + cmdOffset, cmdQueue, cmdQueueLength);
-    memset(cmdQueue, 0, cmdQueueLength);
-    FT8_inc_cmdoffset(cmdQueueLength);
-    cmdQueueLength = 0;
-    r += FT8_memWrite16(REG_CMD_WRITE, cmdOffset);
+    if (ft_cmdQueueLength == 0) return 0;
+    int r = FT8_memWriteBuffer(FT8_RAM_CMD + ft_cmdOffset, ft_cmdQueue, ft_cmdQueueLength);
+    memset(ft_cmdQueue, 0, ft_cmdQueueLength);
+    FT8_inc_cmdoffset(ft_cmdQueueLength);
+    ft_cmdQueueLength = 0;
+    r += FT8_memWrite16(REG_CMD_WRITE, ft_cmdOffset);
     if (cb != NULL) r += FT8_busy(cb, context);
     return r;
 }
@@ -562,8 +601,8 @@ int FT8_cmd_start() {
     return FT8_cmd_execute(NULL, NULL);
 }
 
-void cmdOffsetReadCallback(bool success, uint16_t data, uintptr_t context) {
-    if (success) cmdOffset = data;
+void ft_cmdOffsetReadCallback(bool success, uint16_t data, uintptr_t context) {
+    if (success) ft_cmdOffset = data;
     if (context != NULL) {
         VOIDCB_DATA* cb = (VOIDCB_DATA*)context;
         cb->callback(success, cb->context);
@@ -580,8 +619,8 @@ int FT8_get_cmdoffset(VOID_CALLBACK cb, uintptr_t context) {
         cbd->callback = cb;
         cbd->context = context;
     }
-    if (FT8_memRead16(REG_CMD_WRITE, cmdOffsetReadCallback, (uintptr_t)cbd) < 0) {
-        cmdOffset = 0;
+    if (FT8_memRead16(REG_CMD_WRITE, ft_cmdOffsetReadCallback, (uintptr_t)cbd) < 0) {
+        ft_cmdOffset = 0;
         if (cb != NULL) cb(false, context);
     }
     return 0;
@@ -589,188 +628,188 @@ int FT8_get_cmdoffset(VOID_CALLBACK cb, uintptr_t context) {
 
 /* make current value of cmdOffset available while limiting access to that var to the FT8_commands module */
 uint16_t FT8_report_cmdoffset() {
-    return cmdOffset;
+    return ft_cmdOffset;
 }
 
 /* Begin a co-processor command */
 void FT8_start_cmd(uint32_t command) {
-    queue32(command);
+    ft_queue32(command);
 }
 
 /* Write a string to co-processor memory in context of a command */
-void queue_string(const char *text) {
+void ft_queue_string(const char *text) {
     int i = 0;
     do {
-        queue8(text[i]);
+        ft_queue8(text[i]);
     } while (text[i++] != 0);
-    alignQueue();
+    ft_alignQueue();
 }
 
 /* commands to draw graphics objects: */
 
 int FT8_cmd_text(int16_t x0, int16_t y0, int16_t font, uint16_t options, const char* text) {
-    if (cmdQueueSpace < strlen(text) + 16) return -1;
+    if (ft_cmdQueueSpace < strlen(text) + 16) return -1;
     FT8_start_cmd(CMD_TEXT);
-    queue16(x0);
-    queue16(y0);
-    queue16(font);
-    queue16(options);
-    queue_string(text);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(font);
+    ft_queue16(options);
+    ft_queue_string(text);
     return 0;
 }
 
 int FT8_cmd_button(int16_t x0, int16_t y0, int16_t w0, int16_t h0, int16_t font, uint16_t options, const char* text) {
-    if (cmdQueueSpace < strlen(text) + 20) return -1;
+    if (ft_cmdQueueSpace < strlen(text) + 20) return -1;
     FT8_start_cmd(CMD_BUTTON);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(font);
-    queue16(options);
-    queue_string(text);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(font);
+    ft_queue16(options);
+    ft_queue_string(text);
     return 0;
 }
 
 /* draw a clock */
 int FT8_cmd_clock(int16_t x0, int16_t y0, int16_t r0, uint16_t options, uint16_t hours, uint16_t minutes, uint16_t seconds, uint16_t millisecs) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_CLOCK);
-    queue16(x0);
-    queue16(y0);
-    queue16(r0);
-    queue16(options);
-    queue16(hours);
-    queue16(minutes);
-    queue16(seconds);
-    queue16(millisecs);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(r0);
+    ft_queue16(options);
+    ft_queue16(hours);
+    ft_queue16(minutes);
+    ft_queue16(seconds);
+    ft_queue16(millisecs);
     return 0;
 }
 
 int FT8_cmd_bgcolor(uint32_t color) {
-    if (cmdQueueSpace < 8) return -1;
+    if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_BGCOLOR);
-    queue32(color & 0xffffff);
+    ft_queue32(color & 0xffffff);
     return 0;
 }
 
 int FT8_cmd_fgcolor(uint32_t color) {
-    if (cmdQueueSpace < 8) return -1;
+    if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_FGCOLOR);
-    queue32(color & 0xffffff);
+    ft_queue32(color & 0xffffff);
     return 0;
 }
 
 int FT8_cmd_gradcolor(uint32_t color) {
-    if (cmdQueueSpace < 8) return -1;
+    if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_GRADCOLOR);
-    queue32(color & 0xffffff);
+    ft_queue32(color & 0xffffff);
     return 0;
 }
 
 int FT8_cmd_gauge(int16_t x0, int16_t y0, int16_t r0, uint16_t options, uint16_t major, uint16_t minor, uint16_t val, uint16_t range) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_GAUGE);
-    queue16(x0);
-    queue16(y0);
-    queue16(r0);
-    queue16(options);
-    queue16(major);
-    queue16(minor);
-    queue16(val);
-    queue16(range);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(r0);
+    ft_queue16(options);
+    ft_queue16(major);
+    ft_queue16(minor);
+    ft_queue16(val);
+    ft_queue16(range);
     return 0;
 }
 
 int FT8_cmd_gradient(int16_t x0, int16_t y0, uint32_t rgb0, int16_t x1, int16_t y1, uint32_t rgb1) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_GRADIENT);
-    queue16(x0);
-    queue16(y0);
-    queue32(rgb0 & 0xffffff);
-    queue16(x1);
-    queue16(y1);
-    queue32(rgb1 & 0xffffff);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue32(rgb0 & 0xffffff);
+    ft_queue16(x1);
+    ft_queue16(y1);
+    ft_queue32(rgb1 & 0xffffff);
     return 0;
 }
 
 int FT8_cmd_keys(int16_t x0, int16_t y0, int16_t w0, int16_t h0, int16_t font, uint16_t options, const char* text) {
-    if (cmdQueueSpace < strlen(text) + 20) return -1;
+    if (ft_cmdQueueSpace < strlen(text) + 20) return -1;
     FT8_start_cmd(CMD_KEYS);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(font);
-    queue16(options);
-    queue_string(text);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(font);
+    ft_queue16(options);
+    ft_queue_string(text);
     return 0;
 }
 
 int FT8_cmd_progress(int16_t x0, int16_t y0, int16_t w0, int16_t h0, uint16_t options, uint16_t val, uint16_t range) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_PROGRESS);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(options);
-    queue16(val);
-    queue16(range);
-    alignQueue();
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(options);
+    ft_queue16(val);
+    ft_queue16(range);
+    ft_alignQueue();
     return 0;
 }
 
 int FT8_cmd_scrollbar(int16_t x0, int16_t y0, int16_t w0, int16_t h0, uint16_t options, uint16_t val, uint16_t size, uint16_t range) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_SCROLLBAR);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(options);
-    queue16(val);
-    queue16(size);
-    queue16(range);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(options);
+    ft_queue16(val);
+    ft_queue16(size);
+    ft_queue16(range);
     return 0;
 }
 
 int FT8_cmd_slider(int16_t x0, int16_t y0, int16_t w0, int16_t h0, uint16_t options, uint16_t val, uint16_t range) {
-    if (cmdQueueSpace < 20) return -1;
+    if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_SLIDER);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(options);
-    queue16(val);
-    queue16(range);
-    alignQueue();
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(options);
+    ft_queue16(val);
+    ft_queue16(range);
+    ft_alignQueue();
     return 0;
 }
 
 int FT8_cmd_dial(int16_t x0, int16_t y0, int16_t r0, uint16_t options, uint16_t val) {
-    if (cmdQueueSpace < 16) return -1;
+    if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_DIAL);
-    queue16(x0);
-    queue16(y0);
-    queue16(r0);
-    queue16(options);
-    queue16(val);
-    alignQueue();
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(r0);
+    ft_queue16(options);
+    ft_queue16(val);
+    ft_alignQueue();
     return 0;
 }
 
 int FT8_cmd_toggle(int16_t x0, int16_t y0, int16_t w0, int16_t font, uint16_t options, uint16_t state, const char* text) {
-    if (cmdQueueSpace < strlen(text) + 20) return -1;
+    if (ft_cmdQueueSpace < strlen(text) + 20) return -1;
     FT8_start_cmd(CMD_TOGGLE);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(font);
-    queue16(options);
-    queue16(state);
-    queue_string(text);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(font);
+    ft_queue16(options);
+    ft_queue16(state);
+    ft_queue_string(text);
     return 0;
 }
 
@@ -778,9 +817,9 @@ int FT8_cmd_toggle(int16_t x0, int16_t y0, int16_t w0, int16_t font, uint16_t op
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_setbase(uint32_t _base)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_SETBASE);
-    queue32(_base);
+    ft_queue32(_base);
     return 0;
 }
 #endif
@@ -788,12 +827,12 @@ int FT8_cmd_setbase(uint32_t _base)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_setbitmap(uint32_t addr, uint16_t fmt, uint16_t width, uint16_t height)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_SETBITMAP);
-    queue32(addr);
-    queue16(fmt);
-    queue16(width);
-    queue16(height);
+    ft_queue32(addr);
+    ft_queue16(fmt);
+    ft_queue16(width);
+    ft_queue16(height);
     return 0;
 }
 #endif
@@ -801,13 +840,13 @@ int FT8_cmd_setbitmap(uint32_t addr, uint16_t fmt, uint16_t width, uint16_t heig
 
 int FT8_cmd_number(int16_t x0, int16_t y0, int16_t font, uint16_t options, int32_t number)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_NUMBER);
-    queue16(x0);
-    queue16(y0);
-    queue16(font);
-    queue16(options);
-    queue32(number);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(font);
+    ft_queue16(options);
+    ft_queue32(number);
     return 0;
 }
 
@@ -816,55 +855,55 @@ int FT8_cmd_number(int16_t x0, int16_t y0, int16_t font, uint16_t options, int32
 
 int FT8_cmd_memzero(uint32_t ptr, uint32_t num)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_MEMZERO);
-    queue32(ptr);
-    queue32(num);
+    ft_queue32(ptr);
+    ft_queue32(num);
     return 0;
 }
 
 
 int FT8_cmd_memset(uint32_t ptr, uint8_t value, uint32_t num)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_MEMSET);
-    queue32(ptr);
-    queue32(value);
-    queue32(num);
+    ft_queue32(ptr);
+    ft_queue32(value);
+    ft_queue32(num);
     return 0;
 }
 
 
 int FT8_cmd_memwrite(uint32_t dest, uint32_t num, const uint8_t *data)
 {
-	if (cmdQueueSpace < num + 12) return -1;
+	if (ft_cmdQueueSpace < num + 12) return -1;
     FT8_start_cmd(CMD_MEMWRITE);
-    queue32(dest);
-    queue32(num);
-    memcpy(cmdQueue + cmdQueueLength, data, num);
-    cmdQueueLength += num;
-    alignQueue();
+    ft_queue32(dest);
+    ft_queue32(num);
+    memcpy(ft_cmdQueue + ft_cmdQueueLength, data, num);
+    ft_cmdQueueLength += num;
+    ft_alignQueue();
     return 0;
 }
 
 
 int FT8_cmd_memcpy(uint32_t dest, uint32_t src, uint32_t num)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_MEMCPY);
-    queue32(dest);
-    queue32(src);
-    queue32(num);
+    ft_queue32(dest);
+    ft_queue32(src);
+    ft_queue32(num);
     return 0;
 }
 
 
 int FT8_cmd_append(uint32_t ptr, uint32_t num)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_APPEND);
-    queue32(ptr);
-    queue32(num);
+    ft_queue32(ptr);
+    ft_queue32(num);
     return 0;
 }
 
@@ -916,10 +955,10 @@ int FT8_cmd_append(uint32_t ptr, uint32_t num)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_mediafifo(uint32_t ptr, uint32_t size)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_MEDIAFIFO);
-    queue32(ptr);
-    queue32(size);
+    ft_queue32(ptr);
+    ft_queue32(size);
     return 0;
 }
 #endif
@@ -929,29 +968,29 @@ int FT8_cmd_mediafifo(uint32_t ptr, uint32_t size)
 
 int FT8_cmd_translate(int32_t tx, int32_t ty)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_TRANSLATE);
-    queue32(tx);
-    queue32(ty);
+    ft_queue32(tx);
+    ft_queue32(ty);
     return 0;
 }
 
 
 int FT8_cmd_scale(int32_t sx, int32_t sy)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_SCALE);
-    queue32(sx);
-    queue32(sy);
+    ft_queue32(sx);
+    ft_queue32(sy);
     return 0;
 }
 
 
 int FT8_cmd_rotate(int32_t ang)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_ROTATE);
-    queue32(ang);
+    ft_queue32(ang);
     return 0;
 }
 
@@ -1003,18 +1042,18 @@ int FT8_cmd_rotate(int32_t ang)
 
 int FT8_cmd_calibrate(void)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_CALIBRATE);
-    queue32(0);
+    ft_queue32(0);
     return 0;
 }
 
 
 int FT8_cmd_interrupt(uint32_t ms)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_INTERRUPT);
-    queue32(ms);
+    ft_queue32(ms);
     return 0;
 }
 
@@ -1022,10 +1061,10 @@ int FT8_cmd_interrupt(uint32_t ms)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_romfont(uint32_t font, uint32_t romslot)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_ROMFONT);
-    queue32(font & 0xffff);
-    queue32(romslot & 0xffff);
+    ft_queue32(font & 0xffff);
+    ft_queue32(romslot & 0xffff);
     return 0;
 }
 #endif
@@ -1033,10 +1072,10 @@ int FT8_cmd_romfont(uint32_t font, uint32_t romslot)
 
 int FT8_cmd_setfont(uint32_t font, uint32_t ptr)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_SETFONT);
-    queue32(font);
-    queue32(ptr);
+    ft_queue32(font);
+    ft_queue32(ptr);
     return 0;
 }
 
@@ -1044,11 +1083,11 @@ int FT8_cmd_setfont(uint32_t font, uint32_t ptr)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_setfont2(uint32_t font, uint32_t ptr, uint32_t firstchar)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_SETFONT2);
-    queue32(font);
-    queue32(ptr);
-    queue32(firstchar);
+    ft_queue32(font);
+    ft_queue32(ptr);
+    ft_queue32(firstchar);
     return 0;
 }
 #endif
@@ -1057,9 +1096,9 @@ int FT8_cmd_setfont2(uint32_t font, uint32_t ptr, uint32_t firstchar)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_setrotate(uint32_t r)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_SETROTATE);
-    queue32(r);
+    ft_queue32(r);
     return 0;
 }
 #endif
@@ -1068,9 +1107,9 @@ int FT8_cmd_setrotate(uint32_t r)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_setscratch(uint32_t handle)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_SETSCRATCH);
-    queue32(handle);
+    ft_queue32(handle);
     return 0;
 }
 #endif
@@ -1078,24 +1117,24 @@ int FT8_cmd_setscratch(uint32_t handle)
 
 int FT8_cmd_sketch(int16_t x0, int16_t y0, uint16_t w0, uint16_t h0, uint32_t ptr, uint16_t format)
 {
-	if (cmdQueueSpace < 20) return -1;
+	if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_SKETCH);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue32(ptr);
-    queue16(format);
-    alignQueue();
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue32(ptr);
+    ft_queue16(format);
+    ft_alignQueue();
     return 0;
 }
 
 
 int FT8_cmd_snapshot(uint32_t ptr)
 {
-	if (cmdQueueSpace < 8) return -1;
+	if (ft_cmdQueueSpace < 8) return -1;
     FT8_start_cmd(CMD_SNAPSHOT);
-    queue32(ptr);
+    ft_queue32(ptr);
     return 0;
 }
 
@@ -1103,14 +1142,14 @@ int FT8_cmd_snapshot(uint32_t ptr)
 #ifdef FT8_81X_ENABLE
 int FT8_cmd_snapshot2(uint32_t fmt, uint32_t ptr, int16_t x0, int16_t y0, int16_t w0, int16_t h0)
 {
-	if (cmdQueueSpace < 20) return -1;
+	if (ft_cmdQueueSpace < 20) return -1;
     FT8_start_cmd(CMD_SNAPSHOT2);
-    queue32(fmt);
-    queue32(ptr);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
+    ft_queue32(fmt);
+    ft_queue32(ptr);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
     return 0;
 }
 #endif
@@ -1118,26 +1157,26 @@ int FT8_cmd_snapshot2(uint32_t fmt, uint32_t ptr, int16_t x0, int16_t y0, int16_
 
 int FT8_cmd_spinner(int16_t x0, int16_t y0, uint16_t style, uint16_t scale)
 {
-	if (cmdQueueSpace < 12) return -1;
+	if (ft_cmdQueueSpace < 12) return -1;
     FT8_start_cmd(CMD_SPINNER);
-    queue16(x0);
-    queue16(y0);
-    queue16(style);
-    queue16(scale);
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(style);
+    ft_queue16(scale);
     return 0;
 }
 
 
 int FT8_cmd_track(int16_t x0, int16_t y0, int16_t w0, int16_t h0, int16_t tag)
 {
-	if (cmdQueueSpace < 16) return -1;
+	if (ft_cmdQueueSpace < 16) return -1;
     FT8_start_cmd(CMD_TRACK);
-    queue16(x0);
-    queue16(y0);
-    queue16(w0);
-    queue16(h0);
-    queue16(tag);
-    alignQueue();
+    ft_queue16(x0);
+    ft_queue16(y0);
+    ft_queue16(w0);
+    ft_queue16(h0);
+    ft_queue16(tag);
+    ft_alignQueue();
     return 0;
 }
 
@@ -1294,87 +1333,87 @@ int FT8_cmd_track(int16_t x0, int16_t y0, int16_t w0, int16_t h0, int16_t tag)
 
 int FT8_cmd_begindisplay(bool color, bool stencil, bool tag, uint32_t clearColor) {
     if (FT8_cmd_memzero(FT8_RAM_DL, 8192) < 0) return -1;
-    if (cmdQueueSpace < 12) return -1;
-    queue32(CMD_DLSTART);
-    queue32(DL_CLEAR_RGB | (clearColor & 0xffffff));
-    queue32(CLEAR(color, stencil, tag));
+    if (ft_cmdQueueSpace < 12) return -1;
+    ft_queue32(CMD_DLSTART);
+    ft_queue32(DL_CLEAR_RGB | (clearColor & 0xffffff));
+    ft_queue32(CLEAR(color, stencil, tag));
     return 0;
 }
 
 int FT8_cmd_begindisplay_limited(bool color, bool stencil, bool tag, uint32_t clearColor, uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
     if (FT8_cmd_memzero(FT8_RAM_DL, 8192) < 0) return -1;
-    if (cmdQueueSpace < 20) return -1;
-    queue32(CMD_DLSTART);
-    queue32(SCISSOR_XY(x, y));
-    queue32(SCISSOR_SIZE(w, h));
-    queue32(DL_CLEAR_RGB | (clearColor & 0xffffff));
-    queue32(CLEAR(color, stencil, tag));
+    if (ft_cmdQueueSpace < 20) return -1;
+    ft_queue32(CMD_DLSTART);
+    ft_queue32(SCISSOR_XY(x, y));
+    ft_queue32(SCISSOR_SIZE(w, h));
+    ft_queue32(DL_CLEAR_RGB | (clearColor & 0xffffff));
+    ft_queue32(CLEAR(color, stencil, tag));
     return 0;
 }
 
 int FT8_cmd_color(uint32_t color) {
-    if (cmdQueueSpace < 4) return -1;
-    queue32(DL_COLOR_RGB | (color & 0xffffff));
+    if (ft_cmdQueueSpace < 4) return -1;
+    ft_queue32(DL_COLOR_RGB | (color & 0xffffff));
     return 0;
 }
 
 int FT8_cmd_point(int16_t x0, int16_t y0, uint16_t size)
 {
-	if (cmdQueueSpace < 16) return -1;
-    queue32(BEGIN(FT8_POINTS));
-    queue32(POINT_SIZE(16 * size));
-    queue32(VERTEX2F(16 * x0, 16 * y0));
-    queue32(END());
+	if (ft_cmdQueueSpace < 16) return -1;
+    ft_queue32(BEGIN(FT8_POINTS));
+    ft_queue32(POINT_SIZE(16 * size));
+    ft_queue32(VERTEX2F(16 * x0, 16 * y0));
+    ft_queue32(END());
     return 0;
 }
 
 
 int FT8_cmd_line(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t width)
 {
-	if (cmdQueueSpace < 20) return -1;
-	queue32(BEGIN(FT8_LINES));
-    queue32(LINE_WIDTH(16 * width));
-    queue32(VERTEX2F(16 * x0, 16 * y0));
-    queue32(VERTEX2F(16 * x1, 16 * y1));
-    queue32(END());
+	if (ft_cmdQueueSpace < 20) return -1;
+	ft_queue32(BEGIN(FT8_LINES));
+    ft_queue32(LINE_WIDTH(16 * width));
+    ft_queue32(VERTEX2F(16 * x0, 16 * y0));
+    ft_queue32(VERTEX2F(16 * x1, 16 * y1));
+    ft_queue32(END());
     return 0;
 }
 
 
 int FT8_cmd_rect(int16_t x0, int16_t y0, int16_t x1, int16_t y1, uint16_t corner)
 {
-	if (cmdQueueSpace < 20) return -1;
-    queue32(BEGIN(FT8_RECTS));
-    queue32(LINE_WIDTH(16 * corner));
-    queue32(VERTEX2F(16 * x0, 16 * y0));
-    queue32(VERTEX2F(16 * x1, 16 * y1));
-    queue32(END());
+	if (ft_cmdQueueSpace < 20) return -1;
+    ft_queue32(BEGIN(FT8_RECTS));
+    ft_queue32(LINE_WIDTH(16 * corner));
+    ft_queue32(VERTEX2F(16 * x0, 16 * y0));
+    ft_queue32(VERTEX2F(16 * x1, 16 * y1));
+    ft_queue32(END());
     return 0;
 }
 
 int FT8_cmd_enddisplay() {
-    if (cmdQueueSpace < 8) return -1;
-    queue32(DISPLAY());
-    queue32(CMD_SWAP);
+    if (ft_cmdQueueSpace < 8) return -1;
+    ft_queue32(DISPLAY());
+    ft_queue32(CMD_SWAP);
     return 0;
 }
 
 int FT8_cmd_tag(uint8_t tag) {
-    if (cmdQueueSpace < 4) return -1;
-    queue32(TAG(tag));
+    if (ft_cmdQueueSpace < 4) return -1;
+    ft_queue32(TAG(tag));
     return 0;
 }
 
 int FT8_cmd_tagmask(bool enableTag) {
-    if (cmdQueueSpace < 4) return -1;
-    queue32(TAG_MASK(enableTag));
+    if (ft_cmdQueueSpace < 4) return -1;
+    ft_queue32(TAG_MASK(enableTag));
     return 0;
 }
 
 int FT8_cmd_scissor(uint16_t x, uint16_t y, uint16_t w, uint16_t h) {
-    if (cmdQueueSpace < 8) return -1;
-    queue32(SCISSOR_XY(x, y));
-    queue32(SCISSOR_SIZE(w, h));
+    if (ft_cmdQueueSpace < 8) return -1;
+    ft_queue32(SCISSOR_XY(x, y));
+    ft_queue32(SCISSOR_SIZE(w, h));
     return 0;
 }
 
@@ -1422,33 +1461,33 @@ const uint8_t FT8_GT911_data[1184] PROGMEM ={
 /****************************/
 
 /* init, has to be executed with the SPI setup to 11 MHz or less as required by FT8xx */
-uint8_t initTimeout = 0;
+uint8_t ft_initTimeout = 0;
 
-void testListEndCallback(bool success, uintptr_t context) {
+void ft_testListEndCallback(bool success, uintptr_t context) {
     if (ft_initCallback != NULL) ft_initCallback(success);
 }
 
-void testListCallback(uintptr_t context) {
+void ft_testListCallback(uintptr_t context) {
     FT8_cmd_begindisplay(true, true, true, 0x000000);
     FT8_cmd_color(0xffffff);
     FT8_cmd_text(160, 50, 29, FT8_OPT_CENTER, "Wait!");
     FT8_cmd_spinner(160, 100, 0, 0);
     FT8_cmd_enddisplay();
-    FT8_cmd_execute(testListEndCallback, NULL);
+    FT8_cmd_execute(ft_testListEndCallback, NULL);
 }
 
-void initFinalCallback(bool success, uintptr_t context) {
-    FT8_get_cmdoffset(testListEndCallback, NULL); /* just to be safe */
+void ft_initFinalCallback(bool success, uintptr_t context) {
+    FT8_get_cmdoffset(ft_testListEndCallback, NULL); /* just to be safe */
     //SYS_TIME_CallbackRegisterMS(testListCallback, 0, 100, SYS_TIME_SINGLE);
 }
 
-void initIDReadCallback(bool success, uint8_t data, uintptr_t context); //predef
+void ft_initIDReadCallback(bool success, uint8_t data, uintptr_t context); //predef
 
-void initTimerCallback(uintptr_t context) {
+void ft_initTimerCallback(uintptr_t context) {
     switch (context) {
         case 0:
             LCD_PD_N_Set();
-            SYS_TIME_CallbackRegisterMS(initTimerCallback, 1, 21, SYS_TIME_SINGLE);
+            SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 1, 21, SYS_TIME_SINGLE);
             break;
         case 1:
             if (FT8_HAS_CRYSTAL != 0) {
@@ -1457,20 +1496,20 @@ void initTimerCallback(uintptr_t context) {
                 FT8_cmdWrite(FT8_CLKINT, 0); /* setup FT8xx for internal clock */
             }
             FT8_cmdWrite(FT8_ACTIVE, 0); /* start FT8xx */
-            SYS_TIME_CallbackRegisterMS(initTimerCallback, 2, 500, SYS_TIME_SINGLE);
+            SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 2, 500, SYS_TIME_SINGLE);
             break;
         case 2:
-            FT8_memRead8(REG_ID, initIDReadCallback, NULL);
+            FT8_memRead8(REG_ID, ft_initIDReadCallback, NULL);
             break;
         case 3:
-            FT8_busy(initFinalCallback, NULL);
+            FT8_busy(ft_initFinalCallback, NULL);
             break;
         default:
             break;
     }
 }
 
-void initPart2(bool success, uintptr_t context) {
+void ft_initPart2(bool success, uintptr_t context) {
     /* configure Touch */
     FT8_memWrite8(REG_TOUCH_MODE, FT8_TMODE_FRAME); /* enable touch */
     FT8_memWrite16(REG_TOUCH_RZTHRESH, FT8_TOUCH_RZTHRESH); /* eliminate any false touches */
@@ -1492,16 +1531,16 @@ void initPart2(bool success, uintptr_t context) {
     FT8_memWrite16(REG_PWM_HZ, 500);
     FT8_memWrite8(REG_PWM_DUTY, 64); /* turn on backlight to some value that needs to be adjusted or not... */
 
-    SYS_TIME_CallbackRegisterMS(initTimerCallback, 3, 2, SYS_TIME_SINGLE);
+    SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 3, 2, SYS_TIME_SINGLE);
 }
 
-void initIDReadCallback(bool success, uint8_t data, uintptr_t context) {
+void ft_initIDReadCallback(bool success, uint8_t data, uintptr_t context) {
     if (!success || data != 0x7C) {
-        if (++initTimeout > 100) {
+        if (++ft_initTimeout > 100) {
             if (ft_initCallback != NULL) ft_initCallback(false);
             return;
         }
-        SYS_TIME_CallbackRegisterMS(initTimerCallback, 2, 5, SYS_TIME_SINGLE);
+        SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 2, 5, SYS_TIME_SINGLE);
         return;
     }
 
@@ -1522,7 +1561,7 @@ void initIDReadCallback(bool success, uint8_t data, uintptr_t context) {
     FT8_memWrite16(REG_VSYNC1, FT8_VSYNC1); /* end of vertical sync pulse */
     FT8_memWrite8(REG_SWIZZLE, FT8_SWIZZLE); /* FT8xx output to LCD - pin order */
     FT8_memWrite8(REG_PCLK_POL, FT8_PCLKPOL); /* LCD data is clocked in on this PCLK edge */
-    FT8_memWrite8C(REG_CSPREAD, FT8_CSPREAD, initPart2, NULL); /* helps with noise, when set to 1 fewer signals are changed simultaneously, reset-default: 1 */
+    FT8_memWrite8C(REG_CSPREAD, FT8_CSPREAD, ft_initPart2, NULL); /* helps with noise, when set to 1 fewer signals are changed simultaneously, reset-default: 1 */
 
     /* Don't set PCLK yet - wait for just after the first display list */
 }
@@ -1531,15 +1570,19 @@ void FT8_init(SUCCESS_CALLBACK cb) {
     LCD_PD_N_Clear();
     ft_initCallback = cb;
     
-    ft_clearList(&cbList);
-    ft_clearList(&sendList);
-    ft_sending = false;
+    ft_clearList(&ft_cbList);
+    ft_clearList(&ft_sendList);
+    //ft_sending = false;
+    ft_sendNextAt = SYS_TIME_CounterGet();
     
-    SYS_TIME_CallbackRegisterMS(initTimerCallback, 0, 10, SYS_TIME_SINGLE);
+    SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 0, 10, SYS_TIME_SINGLE);
 }
 
 void FT8_IO_Init() {
     SPI2CONbits.FRMPOL = 0; //slave select active low
-    drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
-    DRV_SPI_TransferEventHandlerSet(drv, SPIEventHandler, 0);
+    ft_drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
+    DRV_SPI_TransferEventHandlerSet(ft_drv, SPIEventHandler, 0);
+    
+    ft_sendPause = SYS_TIME_MSToCount(10);
+    ft_sendTimeout = SYS_TIME_MSToCount(1000);
 }

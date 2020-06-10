@@ -81,7 +81,7 @@ void software_reset() {
     (void)RSWRST; //read RSWRST to cause actual reset
 }
 
-void sendStuff(uintptr_t context) {
+/*void sendStuff(uintptr_t context) {
     switch (context) {
         case 0:
             BM83_PowerOn(NULL);
@@ -92,6 +92,45 @@ void sendStuff(uintptr_t context) {
             DAP_MUTE_N_Set();
             break;
     }
+}*/
+
+//approximation for remaining battery energy (in Wh) based on voltage (in V) and current (in A)
+//also see: https://www.desmos.com/calculator/nvqbapyxn2
+double getRemainingBatteryEnergy(double totalVolts, double totalAmps) {
+    double v = totalVolts / 4.0; //single cell voltage
+    if (v < 3.0) v = 3.0;
+    else if (v > 4.2) v = 4.2;
+    
+    double i = totalAmps / 4.0; //single cell current
+    if (i < 0.2) i = 0.2;
+    else if (i > 3.0) i = 3.0;
+    
+    double ov = 0.066 * i - 0.0132; //voltage-axis offset
+    double oe = 1.8 * sqrt(sqrt(i - 0.08)) - 1.05941914429777626; //energy-axis offset
+    
+    double v1 = 3.48 - ov; //function crossover voltage 1
+    double e1 = -1.5 * v1 + 7.5; //energy at v1
+    double v2 = 3.645 - ov; //function crossover voltage 2
+    double e2 = -1.5 * v2 + 10.6; //energy at v2
+    double v3 = 4.098 - ov; //function crossover voltage 3
+    double e3 = 10.2; //energy at v3
+    
+    double e;
+    if (v < v1) { //lower exponential approximation
+        double b = (e2 - e1) / ((v2 - v1) * (e1 - oe));
+        double a = (e1 - oe) / expm1(b * (v1 - 3));
+        e = a * expm1(b * (v - 3)) + oe;
+    } else if (v < v2) { //first linear approximation
+        e = (e2 - e1) / (v2 - v1) * (v - v1) + e1;
+    } else if (v < v3) { //first linear approximation
+        e = (e3 - e2) / (v3 - v2) * (v - v2) + e2;
+    } else { //upper exponential approximation
+        double d = (e3 - e2) / ((v3 - v2) * (10.53 - e3));
+        double c = (e3 - 10.53) / expm1(d * (v3 - 4.2));
+        e = c * expm1(d * (v - 4.2)) + 10.53;
+    }
+    
+    return 16 * (e - oe); //total energy in all 16 cells
 }
 
 /**************************/
@@ -154,13 +193,16 @@ void APP_Tasks() {
             break;        
         case APP_STATE_INIT_DAP:
             UI_Tasks();
+            DAP_Tasks();
             break;
         case APP_STATE_INIT_BM83:
             UI_Tasks();
+            DAP_Tasks();
             BM83_Tasks();
             break;
         case APP_STATE_SERVICE_TASKS:
             UI_Tasks();
+            DAP_Tasks();
             BM83_Tasks();
             generalTasks();
             break;
@@ -189,15 +231,24 @@ void init_bm83_callback(bool success) {
     }
 }
 
+void init_dap_callback(bool success);
+
+void init_dap_retry(uintptr_t context) {
+    DAP_Chip_Init(init_dap_callback);
+}
+
 void init_dap_callback(bool success) {
-    static bool dapFailedBefore = false;
+    //static bool dapFailedBefore = false;
+    static uint8_t dapFailedBefore = 0;
     
     if (success) { //success: DAP init done, start BM83 init
         appData.state = APP_STATE_INIT_BM83;
         BM83_Module_Init(init_bm83_callback);
-    } else if (!dapFailedBefore) { //failed once: try again
-        dapFailedBefore = true;
-        DAP_Chip_Init(init_dap_callback);
+        DAP_ShutDown(NULL);
+    } else if (/*!dapFailedBefore*/dapFailedBefore++ < 20) { //failed once: try again
+        SYS_TIME_CallbackRegisterMS(init_dap_retry, 0, 1000, SYS_TIME_SINGLE);
+        //dapFailedBefore = true;
+        //DAP_Chip_Init(init_dap_callback);
     } else { //failed twice: reset
         software_reset();
     }
@@ -207,9 +258,9 @@ void init_ui_callback(bool success) {
     static bool uiFailedBefore = false;
     
     if (success) { //success: DAP init done, start BM83 init
-        appData.state = APP_STATE_SERVICE_TASKS;//APP_STATE_INIT_DAP;
+        appData.state = APP_STATE_INIT_DAP;
         SYS_TIME_CallbackRegisterMS(millisecondCallback, NULL, 1, SYS_TIME_PERIODIC);
-        //DAP_Chip_Init(init_dap_callback);
+        DAP_Chip_Init(init_dap_callback);
     } else if (!uiFailedBefore) { //failed once: try again
         uiFailedBefore = true;
         UI_Main_Init(init_ui_callback);

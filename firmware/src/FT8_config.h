@@ -746,7 +746,7 @@
 #define FT8_SWIZZLE	(2L)
 #define FT8_PCLK	(6L)
 #define FT8_CSPREAD	(0L)
-#define FT8_TOUCH_RZTHRESH (1200L)
+#define FT8_TOUCH_RZTHRESH (1000L)
 #define FT8_HAS_CRYSTAL 1
 #endif
 

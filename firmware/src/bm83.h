@@ -42,23 +42,29 @@ extern "C" {
         BM83_OFF,
         BM83_IDLE,
         BM83_CONNECTED,
-        BM83_PLAYING,
         BM83_BUSY
     } BM83_STATE;
     
     typedef enum {
         BM83_CMD_MMI_Action = 0x02,
+        BM83_CMD_Music_Control = 0x04,
         BM83_CMD_Read_BTM_Version = 0x08,
+        BM83_CMD_AVC_Vendor_Dependent_Cmd = 0x0B,
         BM83_CMD_EventAck = 0x14,
+        BM83_CMD_Disconnect = 0x18,
         BM83_CMD_Rx_Buffer_Size = 0x1f,
+        BM83_CMD_Set_Overall_Gain = 0x23,
         BM83_CMD_NONE = 0xff
     } BM83_COMMAND;
     
     typedef enum {
         BM83_EVENT_CommandAck = 0x00,
         BM83_EVENT_BTM_Status = 0x01,
+        BM83_EVENT_Read_Linked_Device_Information_Reply = 0x17,
         BM83_EVENT_Read_BTM_Version_Reply = 0x18,
+        BM83_EVENT_AVC_Vendor_Dependent_Response = 0x1A,
         BM83_EVENT_Ringtone_Status_Indication = 0x24,
+        BM83_EVENT_Report_AVRCP_ABS_Volume_Level = 0x29,
         BM83_EVENT_Report_Type_Codec = 0x2D,
         BM83_EVENT_Report_BTM_Initial_Status = 0x30,
         BM83_EVENT_NONE = 0xff
@@ -97,10 +103,11 @@ extern "C" {
     typedef enum {
         BM83_CHANGE_STATE = 0,
         BM83_CHANGE_PLAYBACK,
-        BM83_CHANGE_CODEC
+        BM83_CHANGE_CODEC,
+        BM83_CHANGE_VOLUME
     } BM83_STATE_CHANGE_TYPE;
     
-    typedef void (*BM83_COMMAND_CALLBACK)(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context);
+    typedef bool (*BM83_COMMAND_CALLBACK)(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context);
     
     typedef void (*BM83_STATE_CHANGE_CALLBACK)(BM83_STATE_CHANGE_TYPE changeType);
 
@@ -115,11 +122,20 @@ extern "C" {
     uint32_t bm83_samplerate_number;
     BM83_CODEC_STATUS bm83_codec_status;
     bool bm83_pairing;
+    bool bm83_playing;
+    bool bm83_avrcp_connected;
+    bool bm83_abs_vol_supported;
+    uint8_t bm83_abs_vol;
     
     void BM83_PowerOn(SUCCESS_CALLBACK callback);
     void BM83_PowerOff(SUCCESS_CALLBACK callback);
     void BM83_EnterPairing(SUCCESS_CALLBACK callback);
     void BM83_ExitPairing(SUCCESS_CALLBACK callback);
+    void BM83_DisconnectLink(SUCCESS_CALLBACK callback);
+    void BM83_SetAbsVolume(uint8_t absVol, SUCCESS_CALLBACK callback);
+    void BM83_PlayPause(SUCCESS_CALLBACK callback);
+    void BM83_NextTrack(SUCCESS_CALLBACK callback);
+    void BM83_PrevTrack(SUCCESS_CALLBACK callback);
     
     void BM83_IO_Init();
     void BM83_Module_Init(SUCCESS_CALLBACK callback);

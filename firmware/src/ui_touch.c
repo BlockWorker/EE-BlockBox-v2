@@ -14,18 +14,35 @@
 #include "FT8.h"
 #include "flash.h"
 #include "bm83.h"
+#include "dap.h"
+#include "ui_touch_draws.h"
 
 /*****************************/
 /* Variables and definitions */
 /*****************************/
 
-SUCCESS_CALLBACK ui_initCallback;
+#define UI_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
 
-bool ui_interruptReceived = false;
-uint8_t ui_touchedTag = 0;
-bool ui_touchDown = false;
+static SUCCESS_CALLBACK ui_initCallback;
+
+//bool ui_interruptReceived = false;
+static uint8_t ui_touchedTag = 0;
+static bool ui_touchLocked = false;
+static bool ui_touchDown = false;
+static bool ui_initialTouch = false;
+static bool ui_touchReleased = false;
 
 uint32_t ui_themeColor = 0x0040ff;
+
+static uint16_t ui_touchX = 0x8000;
+static uint16_t ui_touchY = 0x8000;
+
+static uint32_t ui_nextIntAt;
+static uint32_t ui_intPause;
+
+static uint16_t ui_minVolume = 0x110; //-50dB
+static uint16_t ui_maxVolume = 0x098; //-20dB
+static uint16_t ui_volumeStep = 0x004; //1dB step
 
 /*************************/
 /* Calibration functions */
@@ -34,7 +51,7 @@ uint32_t ui_themeColor = 0x0040ff;
 void ui_touchmatrix_read_callback(bool success, uint32_t data, uintptr_t context) {
     flash_touch_matrix[context] = data;
     if (context >= 5) {
-        FLASH_Write();
+        //FLASH_Write();
     } else {
         FT8_memRead32(REG_TOUCH_TRANSFORM_B + 4 * context, ui_touchmatrix_read_callback, context + 1);
     }
@@ -53,7 +70,7 @@ void ui_calibrate() {
 }
 
 void ui_writeOrCalibrateTouch() {
-    if (flash_touch_matrix[0] == flash_touch_matrix[1] &&
+    /*if (flash_touch_matrix[0] == flash_touch_matrix[1] &&
         flash_touch_matrix[1] == flash_touch_matrix[2] &&
         flash_touch_matrix[2] == flash_touch_matrix[3] &&
         flash_touch_matrix[3] == flash_touch_matrix[4] &&
@@ -61,669 +78,29 @@ void ui_writeOrCalibrateTouch() {
         ui_calibrate();
     } else {
         FT8_memWriteBuffer(REG_TOUCH_TRANSFORM_A, (uint8_t*)flash_touch_matrix, 24);
-    }
+    }*/
+    ui_calibrate();
+}
+
+/********************/
+/* Helper functions */
+/********************/
+
+char* ui_volToString(uint16_t vol) {
+    static char res[6];
+    memset(res, 0, 6);
+    uint16_t rvol = vol & 0x03fc; //round and cut volume
+    uint16_t rem = vol & 0x3;
+    if (rem == 0x3 || (rem == 0x2 && (rvol & 0x4))) rvol += 0x4; //round up if closer to top or (equal and even number above)
+    int16_t decibels = 18 - (int16_t)(rvol >> 2);
+    if (decibels == 0) return "0dB";
+    snprintf(res, 6, "%+ddB", decibels);
+    return res;
 }
 
 /****************************/
 /* Screen drawing functions */
 /****************************/
-
-void ui_drawCog(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //center circle white
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(94));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(320, 320));
-    //center circle black
-    FT8_start_cmd(POINT_SIZE(62));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(320, 320));
-    FT8_start_cmd(END());
-    //outer line
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(291, 112));
-    FT8_start_cmd(VERTEX2F(276, 163));
-    FT8_start_cmd(VERTEX2F(241, 177));
-    FT8_start_cmd(VERTEX2F(194, 152));
-    FT8_start_cmd(VERTEX2F(153, 192));
-    FT8_start_cmd(VERTEX2F(178, 239));
-    FT8_start_cmd(VERTEX2F(164, 274));
-    FT8_start_cmd(VERTEX2F(112, 290));
-    FT8_start_cmd(VERTEX2F(112, 346));
-    FT8_start_cmd(VERTEX2F(162, 362));
-    FT8_start_cmd(VERTEX2F(177, 399));
-    FT8_start_cmd(VERTEX2F(152, 446));
-    FT8_start_cmd(VERTEX2F(192, 486));
-    FT8_start_cmd(VERTEX2F(239, 461));
-    FT8_start_cmd(VERTEX2F(275, 476));
-    FT8_start_cmd(VERTEX2F(291, 527));
-    FT8_start_cmd(VERTEX2F(348, 527));
-    FT8_start_cmd(VERTEX2F(363, 477));
-    FT8_start_cmd(VERTEX2F(400, 461));
-    FT8_start_cmd(VERTEX2F(447, 486));
-    FT8_start_cmd(VERTEX2F(488, 445));
-    FT8_start_cmd(VERTEX2F(462, 398));
-    FT8_start_cmd(VERTEX2F(478, 361));
-    FT8_start_cmd(VERTEX2F(527, 346));
-    FT8_start_cmd(VERTEX2F(527, 290));
-    FT8_start_cmd(VERTEX2F(476, 274));
-    FT8_start_cmd(VERTEX2F(461, 239));
-    FT8_start_cmd(VERTEX2F(486, 192));
-    FT8_start_cmd(VERTEX2F(446, 152));
-    FT8_start_cmd(VERTEX2F(398, 177));
-    FT8_start_cmd(VERTEX2F(364, 163));
-    FT8_start_cmd(VERTEX2F(348, 112));
-    FT8_start_cmd(VERTEX2F(291, 112));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawSpeaker28(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 28, 28);
-    //right wave: outer
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(168));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(224, 224));
-    //right wave: inner
-    FT8_start_cmd(POINT_SIZE(146));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(224, 224));
-    //middle wave: outer
-    FT8_start_cmd(POINT_SIZE(129));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(212, 224));
-    //middle wave: inner
-    FT8_start_cmd(POINT_SIZE(107));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(212, 224));
-    //left wave: outer
-    FT8_start_cmd(POINT_SIZE(90));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(197, 224));
-    //left wave: inner
-    FT8_start_cmd(POINT_SIZE(68));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(197, 224));
-    FT8_start_cmd(END());
-    //wave cutoff
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
-    FT8_start_cmd(LINE_WIDTH(6));
-    FT8_start_cmd(VERTEX2F(325, 40));
-    FT8_start_cmd(VERTEX2F(182, 224));
-    FT8_start_cmd(VERTEX2F(325, 404));
-    FT8_start_cmd(END());
-    //body rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(64, 98));
-    FT8_start_cmd(VERTEX2F(170, 350));
-    FT8_start_cmd(END());
-    //body cutouts
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
-    FT8_start_cmd(LINE_WIDTH(6));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(185, 72));
-    FT8_start_cmd(VERTEX2F(118, 139));
-    FT8_start_cmd(VERTEX2F(45, 139));
-    FT8_start_cmd(VERTEX2F(45, 308));
-    FT8_start_cmd(VERTEX2F(118, 308));
-    FT8_start_cmd(VERTEX2F(185, 375));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawSpeaker40(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 40, 40);
-    //right wave: outer
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(240));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(320, 320));
-    //right wave: inner
-    FT8_start_cmd(POINT_SIZE(208));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(320, 320));
-    //middle wave: outer
-    FT8_start_cmd(POINT_SIZE(184));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(303, 320));
-    //middle wave: inner
-    FT8_start_cmd(POINT_SIZE(152));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(303, 320));
-    //left wave: outer
-    FT8_start_cmd(POINT_SIZE(128));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(282, 320));
-    //left wave: inner
-    FT8_start_cmd(POINT_SIZE(96));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(282, 320));
-    FT8_start_cmd(END());
-    //wave cutoff
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_start_cmd(VERTEX2F(438, 92));
-    FT8_start_cmd(VERTEX2F(260, 320));
-    FT8_start_cmd(VERTEX2F(438, 548));
-    FT8_start_cmd(END());
-    //body rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(77, 112));
-    FT8_start_cmd(VERTEX2F(285, 528));
-    FT8_start_cmd(END());
-    //body cutouts
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(264, 103));
-    FT8_start_cmd(VERTEX2F(168, 199));
-    FT8_start_cmd(VERTEX2F(65, 199));
-    FT8_start_cmd(VERTEX2F(65, 440));
-    FT8_start_cmd(VERTEX2F(168, 440));
-    FT8_start_cmd(VERTEX2F(264, 537));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawPowerOffButton(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //outer circle
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(208));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(320, 349));
-    //inner cirle
-    FT8_start_cmd(POINT_SIZE(176));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(320, 349));
-    FT8_start_cmd(END());
-    //black line
-    FT8_start_cmd(BEGIN(FT8_LINES));
-    FT8_start_cmd(LINE_WIDTH(48));
-    FT8_start_cmd(VERTEX2F(320, 120));
-    FT8_start_cmd(VERTEX2F(320, 192));
-    //white line
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(320, 97));
-    FT8_start_cmd(VERTEX2F(320, 273));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawBulb(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //outer circle
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(129));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(320, 321));
-    //inner cirle
-    FT8_start_cmd(POINT_SIZE(97));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(320, 321));
-    FT8_start_cmd(END());
-    //circle cut
-    FT8_start_cmd(BEGIN(FT8_LINES));
-    FT8_start_cmd(LINE_WIDTH(40));
-    FT8_start_cmd(VERTEX2F(320, 392));
-    FT8_start_cmd(VERTEX2F(320, 446));
-    //rays
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(156, 268));
-    FT8_start_cmd(VERTEX2F(105, 241));
-    FT8_start_cmd(VERTEX2F(218, 180));
-    FT8_start_cmd(VERTEX2F(182, 134));
-    FT8_start_cmd(VERTEX2F(320, 150));
-    FT8_start_cmd(VERTEX2F(320, 92));
-    FT8_start_cmd(VERTEX2F(421, 180));
-    FT8_start_cmd(VERTEX2F(457, 134));
-    FT8_start_cmd(VERTEX2F(483, 268));
-    FT8_start_cmd(VERTEX2F(534, 241));
-    FT8_start_cmd(END());
-    //socket edge
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(20));
-    FT8_start_cmd(VERTEX2F(273, 424));
-    FT8_start_cmd(VERTEX2F(273, 495));
-    FT8_start_cmd(VERTEX2F(288, 526));
-    FT8_start_cmd(VERTEX2F(350, 526));
-    FT8_start_cmd(VERTEX2F(366, 495));
-    FT8_start_cmd(VERTEX2F(366, 424));
-    FT8_start_cmd(END());
-    //socket fill
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_start_cmd(VERTEX2F(296, 440));
-    FT8_start_cmd(VERTEX2F(344, 513));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawChain(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //outer lines
-    FT8_start_cmd(BEGIN(FT8_LINES));
-    FT8_start_cmd(LINE_WIDTH(88));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(178, 178));
-    FT8_start_cmd(VERTEX2F(239, 239));
-    FT8_start_cmd(VERTEX2F(400, 400));
-    FT8_start_cmd(VERTEX2F(461, 461));
-    //inner lines
-    FT8_start_cmd(LINE_WIDTH(56));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(178, 178));
-    FT8_start_cmd(VERTEX2F(239, 239));
-    FT8_start_cmd(VERTEX2F(400, 400));
-    FT8_start_cmd(VERTEX2F(461, 461));
-    //connection
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(260, 260));
-    FT8_start_cmd(VERTEX2F(379, 379));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawBluetooth(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //lines
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(207, 207));
-    FT8_start_cmd(VERTEX2F(435, 435));
-    FT8_start_cmd(VERTEX2F(320, 550));
-    FT8_start_cmd(VERTEX2F(320, 89));
-    FT8_start_cmd(VERTEX2F(435, 204));
-    FT8_start_cmd(VERTEX2F(207, 432));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawLightning(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //lines
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(281, 121));
-    FT8_start_cmd(VERTEX2F(444, 121));
-    FT8_start_cmd(VERTEX2F(344, 279));
-    FT8_start_cmd(VERTEX2F(454, 279));
-    FT8_start_cmd(VERTEX2F(208, 526));
-    FT8_start_cmd(VERTEX2F(279, 325));
-    FT8_start_cmd(VERTEX2F(195, 325));
-    FT8_start_cmd(VERTEX2F(281, 121));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-/*void ui_drawBackButtonOld(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //outer rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(72, 170));
-    FT8_start_cmd(VERTEX2F(728, 630));
-    //inner rect
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(100, 220));
-    FT8_start_cmd(VERTEX2F(690, 580));
-    FT8_start_cmd(END());
-    //top inner cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(175, 359));
-    FT8_start_cmd(VERTEX2F(435, 208));
-    FT8_start_cmd(VERTEX2F(435, 361));
-    FT8_start_cmd(VERTEX2F(700, 205));
-    FT8_start_cmd(END());
-    //bottom inner cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(175, 440));
-    FT8_start_cmd(VERTEX2F(435, 591));
-    FT8_start_cmd(VERTEX2F(435, 438));
-    FT8_start_cmd(VERTEX2F(700, 594));
-    FT8_start_cmd(END());
-    //top outer cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(195, 320));
-    FT8_start_cmd(VERTEX2F(464, 164));
-    FT8_start_cmd(VERTEX2F(464, 314));
-    FT8_start_cmd(VERTEX2F(715, 168));
-    FT8_start_cmd(END());
-    //bottom outer cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(195, 479));
-    FT8_start_cmd(VERTEX2F(464, 635));
-    FT8_start_cmd(VERTEX2F(464, 485));
-    FT8_start_cmd(VERTEX2F(715, 631));
-    FT8_start_cmd(END());
-    //bar cutoff rects
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_start_cmd(VERTEX2F(50, 0));
-    FT8_start_cmd(VERTEX2F(210, 160));
-    FT8_start_cmd(VERTEX2F(50, 640));
-    FT8_start_cmd(VERTEX2F(210, 800));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}*/
-
-void ui_drawBackButton(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //inner rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(91, 218));
-    FT8_start_cmd(VERTEX2F(691, 582));
-    //top cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(86, 209));
-    FT8_start_cmd(VERTEX2F(175, 209));
-    FT8_start_cmd(VERTEX2F(175, 361));
-    FT8_start_cmd(VERTEX2F(435, 206));
-    FT8_start_cmd(VERTEX2F(435, 360));
-    FT8_start_cmd(VERTEX2F(708, 195));
-    FT8_start_cmd(END());
-    //bottom cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(86, 590));
-    FT8_start_cmd(VERTEX2F(175, 590));
-    FT8_start_cmd(VERTEX2F(175, 438));
-    FT8_start_cmd(VERTEX2F(435, 593));
-    FT8_start_cmd(VERTEX2F(435, 439));
-    FT8_start_cmd(VERTEX2F(708, 604));
-    FT8_start_cmd(END());
-    //outline
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(86, 209));
-    FT8_start_cmd(VERTEX2F(175, 209));
-    FT8_start_cmd(VERTEX2F(175, 361));
-    FT8_start_cmd(VERTEX2F(435, 206));
-    FT8_start_cmd(VERTEX2F(435, 360));
-    FT8_start_cmd(VERTEX2F(695, 203));
-    FT8_start_cmd(VERTEX2F(695, 596));
-    FT8_start_cmd(VERTEX2F(435, 439));
-    FT8_start_cmd(VERTEX2F(435, 593));
-    FT8_start_cmd(VERTEX2F(175, 438));
-    FT8_start_cmd(VERTEX2F(175, 590));
-    FT8_start_cmd(VERTEX2F(86, 590));
-    FT8_start_cmd(VERTEX2F(86, 209));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-/*void ui_drawForwardButtonOld(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //outer rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(72, 170));
-    FT8_start_cmd(VERTEX2F(728, 630));
-    //inner rect
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(110, 220));
-    FT8_start_cmd(VERTEX2F(700, 580));
-    FT8_start_cmd(END());
-    //top inner cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(624, 359));
-    FT8_start_cmd(VERTEX2F(364, 208));
-    FT8_start_cmd(VERTEX2F(364, 361));
-    FT8_start_cmd(VERTEX2F(99, 205));
-    FT8_start_cmd(END());
-    //bottom inner cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(624, 440));
-    FT8_start_cmd(VERTEX2F(364, 591));
-    FT8_start_cmd(VERTEX2F(364, 438));
-    FT8_start_cmd(VERTEX2F(99, 594));
-    FT8_start_cmd(END());
-    //top outer cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(604, 320));
-    FT8_start_cmd(VERTEX2F(335, 164));
-    FT8_start_cmd(VERTEX2F(335, 314));
-    FT8_start_cmd(VERTEX2F(84, 168));
-    FT8_start_cmd(END());
-    //bottom outer cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(604, 479));
-    FT8_start_cmd(VERTEX2F(335, 635));
-    FT8_start_cmd(VERTEX2F(335, 485));
-    FT8_start_cmd(VERTEX2F(84, 631));
-    FT8_start_cmd(END());
-    //bar cutoff rects
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_start_cmd(VERTEX2F(590, 0));
-    FT8_start_cmd(VERTEX2F(750, 160));
-    FT8_start_cmd(VERTEX2F(590, 640));
-    FT8_start_cmd(VERTEX2F(750, 800));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}*/
-
-void ui_drawForwardButton(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //inner rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(109, 218));
-    FT8_start_cmd(VERTEX2F(709, 582));
-    //top cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_A));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(713, 209));
-    FT8_start_cmd(VERTEX2F(624, 209));
-    FT8_start_cmd(VERTEX2F(624, 361));
-    FT8_start_cmd(VERTEX2F(364, 206));
-    FT8_start_cmd(VERTEX2F(364, 360));
-    FT8_start_cmd(VERTEX2F(91, 195));
-    FT8_start_cmd(END());
-    //bottom cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_B));
-    FT8_start_cmd(VERTEX2F(713, 590));
-    FT8_start_cmd(VERTEX2F(624, 590));
-    FT8_start_cmd(VERTEX2F(624, 438));
-    FT8_start_cmd(VERTEX2F(364, 593));
-    FT8_start_cmd(VERTEX2F(364, 439));
-    FT8_start_cmd(VERTEX2F(91, 604));
-    FT8_start_cmd(END());
-    //outline
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(713, 209));
-    FT8_start_cmd(VERTEX2F(624, 209));
-    FT8_start_cmd(VERTEX2F(624, 361));
-    FT8_start_cmd(VERTEX2F(364, 206));
-    FT8_start_cmd(VERTEX2F(364, 360));
-    FT8_start_cmd(VERTEX2F(104, 203));
-    FT8_start_cmd(VERTEX2F(104, 596));
-    FT8_start_cmd(VERTEX2F(364, 439));
-    FT8_start_cmd(VERTEX2F(364, 593));
-    FT8_start_cmd(VERTEX2F(624, 438));
-    FT8_start_cmd(VERTEX2F(624, 590));
-    FT8_start_cmd(VERTEX2F(713, 590));
-    FT8_start_cmd(VERTEX2F(713, 209));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-/*void ui_drawPlayButtonOld(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //outer rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(142, 80));
-    FT8_start_cmd(VERTEX2F(703, 720));
-    //inner rect
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(177, 120));
-    FT8_start_cmd(VERTEX2F(657, 680));
-    FT8_start_cmd(END());
-    //inner cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_R));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(159, 108));
-    FT8_start_cmd(VERTEX2F(661, 400));
-    FT8_start_cmd(VERTEX2F(159, 691));
-    FT8_start_cmd(END());
-    //outer cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_R));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(131, 62));
-    FT8_start_cmd(VERTEX2F(712, 400));
-    FT8_start_cmd(VERTEX2F(131, 737));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}*/
-
-void ui_drawPlayButton(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 50, 50);
-    //inner rect
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(172, 127));
-    FT8_start_cmd(VERTEX2F(648, 673));
-    //cutout
-    FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_R));
-    FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(150, 100));
-    FT8_start_cmd(VERTEX2F(665, 400));
-    FT8_start_cmd(VERTEX2F(150, 699));
-    FT8_start_cmd(END());
-    //outline
-    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(167, 110));
-    FT8_start_cmd(VERTEX2F(665, 400));
-    FT8_start_cmd(VERTEX2F(167, 689));
-    FT8_start_cmd(VERTEX2F(167, 110));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
-void ui_drawPauseButton(uint16_t x, uint16_t y) {
-    //setup
-    FT8_start_cmd(SAVE_CONTEXT());
-    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
-    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    //outer rects
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(32));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(207, 126));
-    FT8_start_cmd(VERTEX2F(305, 674));
-    FT8_start_cmd(VERTEX2F(495, 126));
-    FT8_start_cmd(VERTEX2F(593, 674));
-    //inner rects
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(207, 126));
-    FT8_start_cmd(VERTEX2F(305, 674));
-    FT8_start_cmd(VERTEX2F(495, 126));
-    FT8_start_cmd(VERTEX2F(593, 674));
-    FT8_start_cmd(END());
-    //cleanup
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
 
 void ui_drawStatusBar() {
     uint16_t barSplitX = 16 * 314 - (uint16_t)(batteryPercent * 6.4);
@@ -758,48 +135,6 @@ void ui_drawStatusBar() {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
-void ui_drawBigOnButton() {
-    FT8_start_cmd(SAVE_CONTEXT());
-    //outer white circle
-    FT8_start_cmd(BEGIN(FT8_POINTS));
-    FT8_start_cmd(POINT_SIZE(16 * 90 + 4));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(16 * 160, 16 * 145));
-    //themed circle
-    FT8_start_cmd(POINT_SIZE(16 * 87 + 8));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(16 * 160, 16 * 145));
-    //inner white circle
-    FT8_start_cmd(POINT_SIZE(16 * 60 + 8));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(16 * 160, 16 * 145));
-    //inner black circle
-    FT8_start_cmd(POINT_SIZE(16 * 57 + 12));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(16 * 160, 16 * 145));
-    FT8_start_cmd(END());
-    //white edges of circle cut
-    FT8_start_cmd(BEGIN(FT8_RECTS));
-    FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(16 * 138, 16 * 59));
-    FT8_start_cmd(VERTEX2F(16 * 182, 16 * 90));
-    //black circle cut
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(16 * 141, 16 * 55));
-    FT8_start_cmd(VERTEX2F(16 * 179, 16 * 92));
-    //white edges of I bar
-    FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(16 * 144, 16 * 32));
-    FT8_start_cmd(VERTEX2F(16 * 176, 16 * 120));
-    //themed part of I bar
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(16 * 147, 16 * 35));
-    FT8_start_cmd(VERTEX2F(16 * 173, 16 * 117));
-    FT8_start_cmd(END());
-    FT8_start_cmd(RESTORE_CONTEXT());
-}
-
 void ui_drawMainScreen() {
     FT8_start_cmd(SAVE_CONTEXT());
     //title and artist labels
@@ -808,7 +143,7 @@ void ui_drawMainScreen() {
     FT8_cmd_text(160, 67, 28, FT8_OPT_CENTERX, "Artist");
     //player controls
     ui_drawBackButton(60, 101);
-    ui_drawPlayButton(137, 101);
+    bm83_playing ? ui_drawPauseButton(137, 101) : ui_drawPlayButton(137, 101);
     ui_drawForwardButton(210, 101);
     //progress bar
     FT8_cmd_bgcolor(0x808080);
@@ -841,7 +176,7 @@ void ui_drawMainScreen() {
     FT8_start_cmd(END());
     //volume display = mute button
     ui_drawSpeaker28(54, 188);
-    FT8_cmd_text(68, 216, 26, FT8_OPT_CENTERX, "-40dB");
+    FT8_cmd_text(68, 216, 26, FT8_OPT_CENTERX, dap_muted ? "Mute" : ui_volToString(dap_volume));
     //remaining icons
     ui_drawBluetooth(133, 191);
     ui_drawBulb(180, 191);
@@ -889,22 +224,29 @@ void ui_drawScreen() {
     FT8_cmd_begindisplay(true, true, true, 0x000000);
     
     ui_drawStatusBar();
-    ui_drawMainScreen();
     
-    /*switch (bm83_state) {
+    switch (bm83_state) {
         case BM83_NOT_INITIALIZED:
             FT8_cmd_color(0xffffff);
-            FT8_cmd_text(160, 70, 29, FT8_OPT_CENTER, "Wait!");
+            FT8_cmd_text(160, 70, 29, FT8_OPT_CENTER, "Initializing...");
             FT8_cmd_spinner(160, 140, 0, 0);
             break;
         case BM83_OFF:
             ui_drawBigOnButton();
             break;
-        case BM83_IDLE:
-            ui_drawIdleScreen();
+        default:
+            ui_drawMainScreen();
             break;
-    }*/
+    }
     
+#if 0
+    FT8_start_cmd(BEGIN(FT8_POINTS));
+    FT8_start_cmd(TAG_MASK(0));
+    FT8_start_cmd(POINT_SIZE(16 * 20));
+    FT8_cmd_color(0x00ff00);
+    FT8_start_cmd(VERTEX2F(16 * ui_touchX, 16 * ui_touchY));
+    FT8_start_cmd(END());
+#endif    
     
     FT8_cmd_enddisplay();
     FT8_cmd_start();
@@ -913,6 +255,11 @@ void ui_drawScreen() {
 /****************************/
 /* Touch handling functions */
 /****************************/
+
+void ui_unlockTouch(bool success) {
+    ui_touchLocked = false;
+    ui_drawScreen();
+}
 
 void ui_trackReadCallback(bool success, uint32_t data, uintptr_t context) {
     if (!success) return;
@@ -928,41 +275,158 @@ void ui_trackReadCallback(bool success, uint32_t data, uintptr_t context) {
 }
 
 void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
-    if (!success) return;
-    ui_touchedTag = data;
-    if (data > 0 && !ui_touchDown) {
-        FT8_memWrite8(REG_INT_MASK, 0x84);
-        ui_touchDown = true;
-    } else if (data == 0 && ui_touchDown) {
-        FT8_memWrite8(REG_INT_MASK, 0x04);
-        ui_touchDown = false;
+    if (success) {
+        if (!ui_touchReleased) ui_touchedTag = data;
+
+        switch (ui_touchedTag) {
+            case 1: //power on
+                if (ui_initialTouch) {
+                    ui_touchLocked = true;
+                    DAP_StartUp(ui_unlockTouch);
+                    BM83_PowerOn(NULL);
+                }
+                break;
+            case 10: //previous
+                if (ui_initialTouch && bm83_state == BM83_CONNECTED) {
+                    ui_touchLocked = true;
+                    BM83_PrevTrack(ui_unlockTouch);
+                }
+                break;
+            case 11: //play/pause
+                if (ui_initialTouch && bm83_state == BM83_CONNECTED) {
+                    ui_touchLocked = true;
+                    BM83_PlayPause(ui_unlockTouch);
+                }
+                break;
+            case 12: //next
+                if (ui_initialTouch && bm83_state == BM83_CONNECTED) {
+                    ui_touchLocked = true;
+                    BM83_NextTrack(ui_unlockTouch);
+                }
+                break;
+            case 13: //volume -
+                if (ui_initialTouch && !dap_muted && dap_volume < ui_minVolume) {
+                    ui_touchLocked = true;
+                    uint16_t newVol = dap_volume + 0x4;
+                    DAP_SetVolume(newVol, ui_unlockTouch);
+                    if (bm83_abs_vol_supported) {
+                        uint8_t absVol = ((uint32_t)(ui_minVolume - newVol) * (uint32_t)0x7F) / (uint32_t)(ui_minVolume - ui_maxVolume);
+                        BM83_SetAbsVolume(absVol, NULL);
+                    }
+                }
+                break;
+            case 14: //mute/unmute
+                if (ui_initialTouch) {
+                    ui_touchLocked = true;
+                    if (dap_muted) DAP_Unmute(ui_unlockTouch);
+                    else DAP_Mute(ui_unlockTouch);
+                }
+                break;
+            case 15: //volume +
+                if (ui_initialTouch && !dap_muted && dap_volume < ui_minVolume) {
+                    ui_touchLocked = true;
+                    uint16_t newVol = dap_volume - 0x4;
+                    DAP_SetVolume(newVol, ui_unlockTouch);
+                    if (bm83_abs_vol_supported) {
+                        uint8_t absVol = ((uint32_t)(ui_minVolume - newVol) * (uint32_t)0x7F) / (uint32_t)(ui_minVolume - ui_maxVolume);
+                        BM83_SetAbsVolume(absVol, NULL);
+                    }
+                }
+                break;
+            case 16: //pairing
+                if (ui_initialTouch) {
+                    ui_touchLocked = true;
+                    if (bm83_state == BM83_CONNECTED) BM83_DisconnectLink(ui_unlockTouch);
+                    else if (bm83_pairing) BM83_ExitPairing(ui_unlockTouch);
+                    else BM83_EnterPairing(ui_unlockTouch);
+                }
+                break;
+            case 19: //power off
+                if (ui_touchReleased) {
+                    ui_touchLocked = true;
+                    DAP_ShutDown(ui_unlockTouch);
+                    BM83_PowerOff(NULL);
+                }
+                break;
+            default:
+                break;
+        }
+
+        if (ui_touchReleased) ui_touchedTag = 0;
     }
-    
-    switch (data) {
-        case 1:
-            FT8_memRead32(REG_TRACKER, ui_trackReadCallback, NULL);
-            break;
-        default:
-            break;
-    }
+    ui_initialTouch = false;
+    ui_touchReleased = false;
 }
 
-void ui_bm83StateChange(BM83_STATE_CHANGE_TYPE changeType) {
+void ui_touchCoordReadCallback(bool success, uint32_t data, uintptr_t context) {
+    if (!success) return;
+    ui_touchX = data >> 16;
+    ui_touchY = data & 0xffff;
+    if (ui_touchX <= 320 && ui_touchY <= 240) FT8_memRead8(REG_TOUCH_TAG, ui_tagReadCallback, NULL);
+    //ui_drawScreen();
+}
+
+void ui_touchReadCallback(bool success, uint32_t data, uintptr_t context) {
+    if (!success) return;
+    bool newTouched = !(data & 0x80000000);
+    if (newTouched && !ui_touchDown) {
+        FT8_memWrite8(REG_INT_MASK, 0x82);
+        ui_touchDown = true;
+        ui_initialTouch = true;
+    } else if (!newTouched && ui_touchDown) {
+        FT8_memWrite8(REG_INT_MASK, 0x02);
+        ui_touchDown = false;
+        ui_touchReleased = true;
+    }
+    if (ui_touchDown) FT8_memRead32(REG_TOUCH_TAG_XY, ui_touchCoordReadCallback, NULL);
+    else FT8_memRead8(REG_TOUCH_TAG, ui_tagReadCallback, NULL);
+}
+
+void ui_doScreenDraw(bool success) {
     ui_drawScreen();
 }
 
-void UI_InterruptHandler() {
-    ui_interruptReceived = true;
+void ui_bm83StateChange(BM83_STATE_CHANGE_TYPE changeType) {
+    switch (changeType) {
+        case BM83_CHANGE_VOLUME:
+            __asm__("nop"); //stupid label workaround
+            uint16_t newVol = ui_minVolume - ((uint32_t)(ui_minVolume - ui_maxVolume) * (uint32_t)(bm83_abs_vol)) / (uint32_t)0x7F;
+            uint16_t mod = newVol % ui_volumeStep;
+            if (mod != 0) {
+                newVol -= mod;
+                if (mod > ui_volumeStep / 2) newVol += ui_volumeStep;
+            }
+            DAP_SetVolume(newVol, ui_doScreenDraw);
+            break;
+        default: break;
+    }
+    
+    ui_drawScreen();
 }
+
+void ui_touchSafetyUnlock(uintptr_t context) {
+    ui_touchLocked = false;
+}
+
+/*void UI_InterruptHandler() {
+    ui_interruptReceived = true;
+}*/
 
 void UI_Tasks() {
     FT8_Tasks();
     
-    if (ui_interruptReceived) {
-        FT8_memRead8(REG_INT_FLAGS, NULL, NULL);
-        FT8_memRead8(REG_TOUCH_TAG, ui_tagReadCallback, 0);
-        ui_interruptReceived = false;
+    uint32_t tick = SYS_TIME_CounterGet();
+    
+    if (tick - ui_nextIntAt < UI_TIMEOUT_MAX_DIFF) {
+        if (!GPIO_PinRead(GPIO_PIN_RC4) && !ui_touchLocked) {
+            FT8_memRead8(REG_INT_FLAGS, NULL, NULL);
+            FT8_memRead32(REG_TOUCH_DIRECT_XY, ui_touchReadCallback, NULL);
+            ui_nextIntAt = tick + ui_intPause;
+        } else {
+            ui_nextIntAt = tick;
+        }
     }
+    
     
     if (batteryUpdated) {
         ui_drawScreen();
@@ -976,15 +440,9 @@ void UI_Tasks() {
 
 void UI_IO_Init() {
     FT8_IO_Init();
-    SYS_INT_SourceEnable(INT_SOURCE_EXTERNAL_4);
-}
-
-void ui_initTimeCallback(uintptr_t context) {
-    switch (context) {
-        case 0:
-            
-            break;
-    }
+    //SYS_INT_SourceEnable(INT_SOURCE_EXTERNAL_4);
+    
+    ui_intPause = SYS_TIME_MSToCount(10);
 }
 
 void ui_ftInitCallback(bool success) {
@@ -992,7 +450,7 @@ void ui_ftInitCallback(bool success) {
        if (ui_initCallback != NULL) ui_initCallback(false);
        return;
     }
-    FT8_memWrite8(REG_INT_MASK, 0x04);
+    FT8_memWrite8(REG_INT_MASK, 0x02);
     FT8_memWrite8(REG_INT_EN, 0x01);
     FT8_memRead8(REG_INT_FLAGS, NULL, NULL);
     ui_writeOrCalibrateTouch();
@@ -1000,7 +458,9 @@ void ui_ftInitCallback(bool success) {
     BM83_SetStateChangeCallback(ui_bm83StateChange);
     if (ui_initCallback != NULL) ui_initCallback(true);
     
-    //SYS_TIME_CallbackRegisterMS(ui_initTimeCallback, 0, 100, SYS_TIME_SINGLE);
+    ui_nextIntAt = SYS_TIME_CounterGet();
+    
+    SYS_TIME_CallbackRegisterMS(ui_touchSafetyUnlock, 0, 5000, SYS_TIME_PERIODIC);
 }
 
 void UI_Main_Init(SUCCESS_CALLBACK cb) {

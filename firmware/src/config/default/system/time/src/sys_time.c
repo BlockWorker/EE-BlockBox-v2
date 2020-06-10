@@ -88,6 +88,7 @@ static inline uint32_t  SYS_TIME_MAKE_HANDLE(uint16_t token, uint16_t index)
 
 static bool SYS_TIME_ResourceLock(void)
 {
+    return true;
     /* We will allow requests to be added from the interrupt
        context of the timer system service. But we must make
        sure that if we are inside interrupt, then we should

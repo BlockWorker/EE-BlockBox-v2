@@ -125,6 +125,14 @@
 #define LCD_PD_N_OutputEnable()      (TRISCCLR = (1<<3))
 #define LCD_PD_N_InputEnable()       (TRISCSET = (1<<3))
 #define LCD_PD_N_PIN                  GPIO_PIN_RC3
+/*** Macros for LCD_INT_N pin ***/
+#define LCD_INT_N_Set()               (LATCSET = (1<<4))
+#define LCD_INT_N_Clear()             (LATCCLR = (1<<4))
+#define LCD_INT_N_Toggle()            (LATCINV= (1<<4))
+#define LCD_INT_N_Get()               ((PORTC >> 4) & 0x1)
+#define LCD_INT_N_OutputEnable()      (TRISCCLR = (1<<4))
+#define LCD_INT_N_InputEnable()       (TRISCSET = (1<<4))
+#define LCD_INT_N_PIN                  GPIO_PIN_RC4
 /*** Macros for LED_MODE1 pin ***/
 #define LED_MODE1_Set()               (LATGSET = (1<<9))
 #define LED_MODE1_Clear()             (LATGCLR = (1<<9))

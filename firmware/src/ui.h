@@ -64,11 +64,11 @@ extern "C" {
     // Section: Interface Functions
     // *****************************************************************************
     // *****************************************************************************
-
+    
     void UI_IO_Init();
     void UI_Main_Init(SUCCESS_CALLBACK cb);
     void UI_Tasks();
-    void UI_InterruptHandler();
+    //void UI_InterruptHandler();
 
 
     /* Provide C++ Compatibility */
