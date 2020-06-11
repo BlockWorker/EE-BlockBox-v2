@@ -66,6 +66,8 @@ double batteryVolts = 0.0;
 double batteryPercentRaw = 100.0;
 uint8_t batteryPercent = 100.0;
 double batteryAmps = 0.0;
+double batteryEnergy = 0.0;
+bool batteryDataValid = false;
 bool batteryUpdated = false;
 
 /********************/
@@ -140,6 +142,8 @@ double getRemainingBatteryEnergy(double totalVolts, double totalAmps) {
 void batVoltageADCCallback() {
     static uint16_t arrayPos = 0;
     
+    batteryDataValid = true;
+    
     batteryVoltageCountSum -= batteryVoltageCounts[arrayPos];
     batteryVoltageCounts[arrayPos] = ADCFLTR1bits.FLTRDATA;
     batteryVoltageCountSum += batteryVoltageCounts[arrayPos++];
@@ -147,8 +151,11 @@ void batVoltageADCCallback() {
     
     batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;
     batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR;
+    if (batteryVolts < 11.6 || batteryVolts > 17) batteryDataValid = false;
     
-    batteryPercentRaw = (batteryVolts - 12.0) / 0.048;
+    batteryEnergy = getRemainingBatteryEnergy(batteryVolts, batteryAmps);
+    
+    batteryPercentRaw = batteryEnergy / 168.48;
     if (batteryPercentRaw < 0.0) batteryPercentRaw = 0.0;
     else if (batteryPercentRaw > 100.0) batteryPercentRaw = 100.0;
     

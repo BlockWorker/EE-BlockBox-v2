@@ -26,7 +26,7 @@ typedef struct {
     uint8_t errorCount;
     DAP_COMMAND_CALLBACK callback;
     uintptr_t callbackContext;
-    uint8_t index;
+    //uint8_t index;
     bool free;
     bool sent;
     bool waiting;
@@ -155,7 +155,7 @@ void dap_clearTaskList() {
     int i;
     for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) {
         DAP_COMMAND_TASK* task = dap_transferTasks + i;
-        task->index = i;
+        //task->index = i;
         task->free = true;
     }
 }

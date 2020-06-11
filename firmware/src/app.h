@@ -103,6 +103,8 @@ uint16_t batteryCurrentCountAverage;
 double batteryVolts;
 uint8_t batteryPercent;
 double batteryAmps;
+double batteryEnergy;
+bool batteryDataValid;
 bool batteryUpdated;
 
 void batVoltageADCCallback();

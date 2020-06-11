@@ -10,6 +10,7 @@
 #define MEM_WRITE	0x80	/* FT8xx Host Memory Write */
 #define MEM_READ	0x00	/* FT8xx Host Memory Read */
 #define FT_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
+#define FT_COMMANDS_LENGTH 100
 
 typedef enum uint8_t {
     CALLBACK_VOID = 0,
@@ -28,10 +29,12 @@ typedef struct {
     bool keepData;
     void* callback;
     uintptr_t context;
+    bool free;
+    bool sent;
     uint32_t timeoutTick;
 } SPI_COMMAND_DATA;
 
-typedef struct spi_cb_item {
+/*typedef struct spi_cb_item {
     SPI_COMMAND_DATA* data;
     struct spi_cb_item* next;
 } SPI_LIST_ITEM;
@@ -40,7 +43,7 @@ typedef struct {
     SPI_LIST_ITEM* head;
     SPI_LIST_ITEM* tail;
     uint16_t length;
-} SPI_LIST;
+} SPI_LIST;*/
 
 typedef struct {
     VOID_CALLBACK callback;
@@ -64,8 +67,10 @@ static uint32_t ft_sendNextAt;
 static uint32_t ft_sendPause;
 static uint32_t ft_sendTimeout;
 
-static SPI_LIST ft_cbList = { NULL, NULL, 0 };
-static SPI_LIST ft_sendList = { NULL, NULL, 0 };
+static SPI_COMMAND_DATA ft_commands[FT_COMMANDS_LENGTH];
+
+//static SPI_LIST ft_cbList = { NULL, NULL, 0 };
+//static SPI_LIST ft_sendList = { NULL, NULL, 0 };
 
 /********************/
 /* Helper functions */
@@ -91,24 +96,25 @@ void ft_alignQueue() {
     while (ft_cmdQueueLength % 4 != 0) ft_cmdQueue[ft_cmdQueueLength++] = 0;
 }
 
-void ft_freeCbData(SPI_COMMAND_DATA* cmd) {
+void ft_freeCmdData(SPI_COMMAND_DATA* cmd) {
     if (cmd == NULL) return;
     free(cmd->sendBuf);
     if (!cmd->keepData) free(cmd->data);
-    free(cmd);
+    cmd->free = true;
+    //free(cmd);
 }
 
-void ft_freeItem(SPI_LIST_ITEM* item) {
+/*void ft_freeItem(SPI_LIST_ITEM* item) {
     if (item == NULL) return;
-    ft_freeCbData(item->data);
+    ft_freeCmdData(item->data);
     free(item);
-}
+}*/
 
 /******************/
 /* List functions */
 /******************/
 
-//append item at end of list
+/*//append item at end of list
 void ft_addToList(SPI_LIST* list, SPI_LIST_ITEM* item) {
     item->next = NULL; //remove potential old list association
     if (list->length == 0) list->head = item; //if first item: set head
@@ -150,6 +156,23 @@ void ft_clearList(SPI_LIST* list) {
     list->head = NULL;
     list->tail = NULL;
     list->length = 0;
+}*/
+
+SPI_COMMAND_DATA* ft_getFreeCommand() {
+    int i;
+    for (i = 0; i < FT_COMMANDS_LENGTH; i++) {
+        SPI_COMMAND_DATA* cmd = ft_commands + i;
+        if (cmd->free) return cmd;
+    }
+    return NULL;
+}
+
+void ft_initCommands() {
+    int i;
+    for (i = 0; i < FT_COMMANDS_LENGTH; i++) {
+        SPI_COMMAND_DATA* cmd = ft_commands + i;
+        cmd->free = true;
+    }
 }
 
 /**********************/
@@ -186,7 +209,7 @@ void FT8_Tasks() {
     }*/
     uint32_t tick = SYS_TIME_CounterGet();
     
-    SPI_LIST_ITEM* prev = NULL;
+    /*SPI_LIST_ITEM* prev = NULL;
     SPI_LIST_ITEM* item = ft_cbList.head;
     while (item != NULL) {
         SPI_COMMAND_DATA* cmd = item->data;
@@ -215,17 +238,39 @@ void FT8_Tasks() {
         cmd->timeoutTick = tick + ft_sendTimeout;
         ft_addToList(&ft_cbList, item);
         ft_sendNextAt = tick + ft_sendTimeout;
+    }*/
+    
+    int i;
+    for (i = 0; i < FT_COMMANDS_LENGTH; i++) {
+        SPI_COMMAND_DATA* cmd = ft_commands + i;
+        if (cmd->free) continue;
+        if (cmd->sent) {
+            if (tick - cmd->timeoutTick < FT_TIMEOUT_MAX_DIFF) { //if callback timed out:
+                cmd->sent = false; //resend
+            }
+        } else if (tick - ft_sendNextAt < FT_TIMEOUT_MAX_DIFF) { //unsent and free to send
+            LCD_CS_N_Clear();
+            DRV_SPI_WriteReadTransferAdd(ft_drv, cmd->sendBuf, cmd->sendLength, cmd->data, cmd->dataLength, &cmd->handle);
+            if (cmd->handle == DRV_SPI_TRANSFER_HANDLE_INVALID) {
+                LCD_CS_N_Set();
+                continue;
+            }
+            cmd->timeoutTick = tick + ft_sendTimeout;
+            cmd->sent = true;
+            ft_sendNextAt = tick + ft_sendTimeout;
+        }
     }
+    if (tick - ft_sendNextAt < FT_TIMEOUT_MAX_DIFF) ft_sendNextAt = tick; //keep updating sendNextAt if nothing is sent
 }
 
 void SPIEventHandler(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE bufferHandle, uintptr_t context) {
-    if (event == DRV_SPI_TRANSFER_EVENT_PENDING || ft_cbList.length == 0) return; //ignore pending events and unexpected events
+    if (event == DRV_SPI_TRANSFER_EVENT_PENDING /*|| ft_cbList.length == 0*/) return; //ignore pending events and unexpected events
     
     LCD_CS_N_Set();
     //ft_sendNext();
     
     //search for corresponding callback info
-    SPI_LIST_ITEM* prev = NULL;
+    /*SPI_LIST_ITEM* prev = NULL;
     SPI_LIST_ITEM* item = ft_cbList.head;
     while (item->data->handle != bufferHandle) {
         prev = item;
@@ -233,13 +278,23 @@ void SPIEventHandler(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE buffe
         if (item == NULL) return; //not found: ignore event
     }
     
-    ft_removeFromList(&ft_cbList, item, prev); //remove callback from list
+    ft_removeFromList(&ft_cbList, item, prev); //remove callback from list*/
+    
+    SPI_COMMAND_DATA* cb = NULL;
+    int i;
+    for (i = 0; i < FT_COMMANDS_LENGTH; i++) {
+        SPI_COMMAND_DATA* cmd = ft_commands + i;
+        if (!cmd->free && cmd->sent && cmd->handle == bufferHandle) {
+            cb = cmd;
+            break;
+        }
+    }
+    if (cb == NULL) return;
     
     //callback (if present)
     bool success = event == DRV_SPI_TRANSFER_EVENT_COMPLETE;
-    SPI_COMMAND_DATA* cb = item->data;
-    uint16_t d;
-    uint32_t e;
+    uint16_t data16;
+    uint32_t data32;
     if (cb->callback != NULL) {
         switch (cb->type) {
             case CALLBACK_VOID:
@@ -249,28 +304,29 @@ void SPIEventHandler(DRV_SPI_TRANSFER_EVENT event, DRV_SPI_TRANSFER_HANDLE buffe
                 ((INT8_CALLBACK) cb->callback)(success, cb->data[4], cb->context);
                 break;
             case CALLBACK_INT16:
-                d = cb->data[4];
-                d |= (cb->data[5] << 8);
-                ((INT16_CALLBACK) cb->callback)(success, d, cb->context);
+                data16 = cb->data[4];
+                data16 |= (cb->data[5] << 8);
+                ((INT16_CALLBACK) cb->callback)(success, data16, cb->context);
                 break;
             case CALLBACK_INT32:
-                e = cb->data[4];
-                e |= (cb->data[5] << 8);
-                e |= (cb->data[6] << 16);
-                e |= (cb->data[7] << 24);
-                ((INT32_CALLBACK) cb->callback)(success, e, cb->context);
+                data32 = cb->data[4];
+                data32 |= (cb->data[5] << 8);
+                data32 |= (cb->data[6] << 16);
+                data32 |= (cb->data[7] << 24);
+                ((INT32_CALLBACK) cb->callback)(success, data32, cb->context);
                 break;
             default:
                 break;
         }
     }
     ft_sendNextAt = SYS_TIME_CounterGet() + ft_sendPause;
-    ft_freeItem(item); //free memory of removed item
+    //ft_freeItem(item); //free memory of removed item
+    ft_freeCmdData(cb);
 }
 
 //generic write
 int ft_genWrite(uint8_t* buf, size_t length, VOID_CALLBACK cb, uintptr_t context, bool wait) {
-    SPI_COMMAND_DATA* cbd = malloc(sizeof(SPI_COMMAND_DATA));
+    SPI_COMMAND_DATA* cbd = ft_getFreeCommand();//malloc(sizeof(SPI_COMMAND_DATA));
     if (cbd == NULL) return -2;
     cbd->type = CALLBACK_VOID;
     cbd->sendBuf = buf;
@@ -280,12 +336,14 @@ int ft_genWrite(uint8_t* buf, size_t length, VOID_CALLBACK cb, uintptr_t context
     cbd->keepData = false;
     cbd->callback = cb;
     cbd->context = context;
+    cbd->free = false;
+    cbd->sent = false;
     
-    SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
+    /*SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
     if (item == NULL) return -2;
-    item->data = cbd;
+    item->data = cbd;*/
     
-    if (wait) {
+    /*if (wait) {
         ft_addToList(&ft_sendList, item);
         //if (!ft_sending) ft_sendNext();
     } else {
@@ -294,13 +352,13 @@ int ft_genWrite(uint8_t* buf, size_t length, VOID_CALLBACK cb, uintptr_t context
         if (handle == DRV_SPI_TRANSFER_HANDLE_INVALID) return -1;
         ft_addToList(&ft_cbList, item);
         //ft_sending = true;
-    }
+    }*/
     return 0;
 }
 
 //generic read
 int ft_genRead(uint8_t* buf, size_t length, size_t dataLength, CALLBACK_TYPE cbType, void* cb, uintptr_t context) {
-    SPI_COMMAND_DATA* cbd = malloc(sizeof(SPI_COMMAND_DATA));
+    SPI_COMMAND_DATA* cbd = ft_getFreeCommand();//malloc(sizeof(SPI_COMMAND_DATA));
     if (cbd == NULL) return -2;
     cbd->type = cbType;
     cbd->sendBuf = buf;
@@ -311,12 +369,14 @@ int ft_genRead(uint8_t* buf, size_t length, size_t dataLength, CALLBACK_TYPE cbT
     cbd->keepData = false;
     cbd->callback = cb;
     cbd->context = context;
+    cbd->free = false;
+    cbd->sent = false;
     
-    SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
+    /*SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
     if (item == NULL) return -2;
-    item->data = cbd;
+    item->data = cbd;*/
     
-    ft_addToList(&ft_sendList, item);
+    //ft_addToList(&ft_sendList, item);
     //if (!ft_sending) ft_sendNext();
     return 0;
 }
@@ -382,7 +442,7 @@ int FT8_memReadBuffer(uint32_t ftAddress, uint8_t* buffer, uint32_t length, VOID
     buf[1] = (uint8_t) (ftAddress >> 8);
     buf[2] = (uint8_t) ftAddress;
     
-    SPI_COMMAND_DATA* cbd = malloc(sizeof(SPI_COMMAND_DATA));
+    SPI_COMMAND_DATA* cbd = ft_getFreeCommand();//malloc(sizeof(SPI_COMMAND_DATA));
     if (cbd == NULL) return -2;
     cbd->type = CALLBACK_VOID;
     cbd->sendBuf = buf;
@@ -392,12 +452,14 @@ int FT8_memReadBuffer(uint32_t ftAddress, uint8_t* buffer, uint32_t length, VOID
     cbd->keepData = true;
     cbd->callback = cb;
     cbd->context = context;
+    cbd->free = false;
+    cbd->sent = false;
     
-    SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
+    /*SPI_LIST_ITEM* item = malloc(sizeof(SPI_LIST_ITEM));
     if (item == NULL) return -2;
     item->data = cbd;
     
-    ft_addToList(&ft_sendList, item);
+    ft_addToList(&ft_sendList, item);*/
     //if (!ft_sending) ft_sendNext();
     return 0;
 }
@@ -1570,9 +1632,10 @@ void FT8_init(SUCCESS_CALLBACK cb) {
     LCD_PD_N_Clear();
     ft_initCallback = cb;
     
-    ft_clearList(&ft_cbList);
-    ft_clearList(&ft_sendList);
+    //ft_clearList(&ft_cbList);
+    //ft_clearList(&ft_sendList);
     //ft_sending = false;
+    ft_initCommands();
     ft_sendNextAt = SYS_TIME_CounterGet();
     
     SYS_TIME_CallbackRegisterMS(ft_initTimerCallback, 0, 10, SYS_TIME_SINGLE);
@@ -1583,6 +1646,6 @@ void FT8_IO_Init() {
     ft_drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
     DRV_SPI_TransferEventHandlerSet(ft_drv, SPIEventHandler, 0);
     
-    ft_sendPause = SYS_TIME_MSToCount(10);
+    ft_sendPause = SYS_TIME_MSToCount(1);
     ft_sendTimeout = SYS_TIME_MSToCount(1000);
 }

@@ -106,14 +106,14 @@ void ui_drawStatusBar() {
     uint16_t barSplitX = 16 * 314 - (uint16_t)(batteryPercent * 6.4);
     char percentText[5] = { 0 };
     snprintf(percentText, 5, "%u%%", batteryPercent);
-    uint16_t percentOffset = batteryPercent < 10 ? 20 : batteryPercent < 100 ? 10 : 0;
+    //uint16_t percentOffset = batteryPercent < 10 ? 20 : batteryPercent < 100 ? 10 : 0;
     //char voltageText[7] = { 0 };
     //snprintf(voltageText, 7, "%5.2fV", batteryVolts);
     
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(BEGIN(FT8_RECTS));
     FT8_start_cmd(LINE_WIDTH(16));
-    FT8_cmd_color(0x202020);
+    FT8_cmd_color(0x303030);
     FT8_start_cmd(VERTEX2F(0, 0));
     FT8_start_cmd(VERTEX2F(16 * 320, 16 * 24));
     FT8_cmd_color(0xffffff);
@@ -121,16 +121,23 @@ void ui_drawStatusBar() {
     FT8_start_cmd(VERTEX2F(16 * 272, 16 * 16));
     FT8_start_cmd(VERTEX2F(16 * 272, 16 * 3));
     FT8_start_cmd(VERTEX2F(16 * 316, 16 * 21));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(16 * 274, 16 * 5));
-    FT8_start_cmd(VERTEX2F(barSplitX, 16 * 19));
-    FT8_cmd_color(ui_themeColor);
-    FT8_start_cmd(VERTEX2F(barSplitX, 16 * 5));
-    FT8_start_cmd(VERTEX2F(16 * 314, 16 * 19));
+    if (batteryDataValid) {
+        FT8_cmd_color(0x000000);
+        FT8_start_cmd(VERTEX2F(16 * 274, 16 * 5));
+        FT8_start_cmd(VERTEX2F(barSplitX, 16 * 19));
+        FT8_cmd_color(ui_themeColor);
+        FT8_start_cmd(VERTEX2F(barSplitX, 16 * 5));
+        FT8_start_cmd(VERTEX2F(16 * 314, 16 * 19));
+    } else {
+        FT8_cmd_color(0x808080);
+        FT8_start_cmd(VERTEX2F(16 * 274, 16 * 5));
+        FT8_start_cmd(VERTEX2F(16 * 314, 16 * 19));
+    }
     FT8_start_cmd(END());
     FT8_cmd_color(0xffffff);
     FT8_cmd_number(120, 2, 27, 0, batteryVoltageCountAverage);
-    FT8_cmd_text(222 + percentOffset, 2, 27, 0, percentText);
+    if (batteryDataValid) FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, percentText);
+    else FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, "---%");
     //FT8_cmd_text(120, 2, 27, 0, voltageText);
     FT8_start_cmd(RESTORE_CONTEXT());
 }
@@ -139,8 +146,9 @@ void ui_drawMainScreen() {
     FT8_start_cmd(SAVE_CONTEXT());
     //title and artist labels
     FT8_cmd_color(0xffffff);
-    FT8_cmd_text(160, 36, 28, FT8_OPT_CENTERX, "Title");
-    FT8_cmd_text(160, 67, 28, FT8_OPT_CENTERX, "Artist");
+    //FT8_cmd_text(160, 36, 28, FT8_OPT_CENTERX, "Title");
+    //FT8_cmd_text(160, 67, 28, FT8_OPT_CENTERX, "Artist");
+    FT8_cmd_text(160, 45, 29, FT8_OPT_CENTERX, "BlockBox v2");
     //player controls
     ui_drawBackButton(60, 101);
     bm83_playing ? ui_drawPauseButton(137, 101) : ui_drawPlayButton(137, 101);
@@ -148,11 +156,11 @@ void ui_drawMainScreen() {
     //progress bar
     FT8_cmd_bgcolor(0x808080);
     FT8_cmd_color(ui_themeColor);
-    FT8_cmd_progress(12, 169, 296, 11, 0, 30, 165);
+    FT8_cmd_progress(12, 169, 296, 11, 0, 165, 165);
     //position+length labels
     FT8_cmd_color(0xffffff);
-    FT8_cmd_text(6, 153, 26, 0, "0:30");
-    FT8_cmd_text(314, 153, 26, FT8_OPT_RIGHTX, "2:45");
+    FT8_cmd_text(6, 153, 26, 0, "-:--");
+    FT8_cmd_text(314, 153, 26, FT8_OPT_RIGHTX, "-:--");
     //separator lines
     FT8_start_cmd(BEGIN(FT8_LINES));
     FT8_start_cmd(LINE_WIDTH(16));
@@ -323,7 +331,7 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                 }
                 break;
             case 15: //volume +
-                if (ui_initialTouch && !dap_muted && dap_volume < ui_minVolume) {
+                if (ui_initialTouch && !dap_muted && dap_volume > ui_maxVolume) {
                     ui_touchLocked = true;
                     uint16_t newVol = dap_volume - 0x4;
                     DAP_SetVolume(newVol, ui_unlockTouch);
@@ -442,7 +450,7 @@ void UI_IO_Init() {
     FT8_IO_Init();
     //SYS_INT_SourceEnable(INT_SOURCE_EXTERNAL_4);
     
-    ui_intPause = SYS_TIME_MSToCount(10);
+    ui_intPause = SYS_TIME_MSToCount(100);
 }
 
 void ui_ftInitCallback(bool success) {
