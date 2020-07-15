@@ -28,7 +28,7 @@
 // *****************************************************************************
 
 #include "app.h"
-#include "i2s.h"
+#include "light.h"
 #include "bm83.h"
 #include "dap.h"
 #include "ui.h"
@@ -37,20 +37,14 @@
 APP_DATA appData;
 
 //batt voltage logging:
-//48200 counts = 15.84v ==> division factor 3042
-//51900 counts = 16.38v ==> division factor 3168
-//52600 counts = 16.43v ==> division factor 3201
-//53000 counts = 16.47v ==> division factor 3218
-//50600 counts = 15.72v ==> division factor 3218
-//50000 counts = 16.04v ==> division factor 3118
-//49500 counts = 16.02v ==> division factor 3090
-//--- capacitors added ---
-//48060c = 15.97v ==> x = 3009 //discharge, power ~= 0
-//51350c = 16.45v ==> x = 3121 //fast charge
-//51500c = 16.50v ==> x = 3121
-//52500c = 16.67v ==> x = 3150
-//50300c = 16.31v ==> x = 3084 //charger disconnected
-//50000c = 16.287v ==> x = 3070
+//45750 counts = 15.72v
+//chg start
+//47800 counts = 16.23v
+//48000 counts = 16.29v
+//48300 counts = 16.40v
+//48600 counts = 16.54v
+//48800 counts = 16.62v
+//48970 counts ~= 16.69v
 
 #define BATTERY_VOLTAGE_AVG_LENGTH 2048
 uint16_t batteryVoltageCounts[BATTERY_VOLTAGE_AVG_LENGTH] = { 0 };
@@ -174,6 +168,10 @@ void batCurrentADCCallback() {
     batteryCurrentCountAverage = batteryCurrentCountSum / BATTERY_CURR_AVG_LENGTH;
 }
 
+void readErrorCb(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+    if (success) UART1_Write(buffer, bufferLength);
+}
+
 void millisecondCallback(uintptr_t context) {
     static uint32_t msCount = 0;
     
@@ -182,15 +180,15 @@ void millisecondCallback(uintptr_t context) {
     
     if (msCount % BATTERY_VOLTAGE_AVG_LENGTH == 0) {
         batteryUpdated = true;
+        
+        DAP_Read(0x02, 1, readErrorCb, NULL);
     }
     
     msCount++;
 }
 
 void generalTasks() {
-    GPIO_PinWrite(AMP_RESET_N_PIN, DAP_VALID_Get());
-    
-    
+    GPIO_PinWrite(AMP_RESET_N_PIN, DAP_VALID_Get() && !dap_muted);
 }
 
 void APP_Tasks() {
@@ -211,6 +209,7 @@ void APP_Tasks() {
             UI_Tasks();
             DAP_Tasks();
             BM83_Tasks();
+            Light_Tasks();
             generalTasks();
             break;
         default:
@@ -297,7 +296,7 @@ void initBatADC() {
 
 void APP_Initialize() {    
     UI_IO_Init();
-    I2S_Init();
+    Light_Init();
     DAP_IO_Init();
     BM83_IO_Init();
     FLASH_Read();

@@ -46,7 +46,7 @@ typedef struct {
 } DAP_COMMAND_QUEUE;*/
 
 const uint8_t __attribute__((keep)) inputMixerCfg[] = //input mixer: 0.5 * A + 0.5 * B (stereo mixed into mono)
-{ 0x00, 0x04, 0x00, 0x00, 0x00, 0x04, 0x00, 0x00,
+{ 0x00, 0x40, 0x00, 0x00, 0x00, 0x40, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
@@ -116,6 +116,14 @@ const uint32_t __attribute__((keep)) eqHifiOld_bass_volume = 0x048; //0dB
 
 const uint8_t __attribute__((keep)) bassTrebleBypass[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x80, 0x00, 0x00 }; //bass and treble set to inline mode
 
+const uint8_t __attribute__((keep)) loudnessBiquad[] = //biquad for loudness compensation: 44Hz center, Q=0.4 Bandpass
+{ 0x00, 0x00, 0x75, 0x88, 0x00, 0x00, 0x00, 0x00, 0xFF, 0xFF, 0x8A, 0x78, 0x00, 0xFF, 0x14, 0xAA, 0xFF, 0x80, 0xEB, 0x11 };
+const uint32_t __attribute__((keep)) loudnessLG = 0xFFC00000; //log gain: -0.5 (==> 1/sqrt(V))
+const uint32_t __attribute__((keep)) loudnessLO = 0x00000000; //log offset: 0
+const uint32_t __attribute__((keep)) loudnessO = 0xFF800000; //offset: -1
+
+const uint32_t __attribute__((keep)) speakerPowerOffset = 0x010; //additional -4dB overall
+
 static DRV_HANDLE dap_drv;
 
 static uint32_t dap_sendTimeoutTicks; //how many ticks a transfer takes to time out
@@ -124,8 +132,9 @@ static uint32_t dap_sendPauseTicks; //how many ticks between transfers
 static DAP_COMMAND_TASK dap_transferTasks[DAP_TASK_LIST_LENGTH];
 
 bool dap_shutDown = true;
-uint16_t dap_volume = 0x098;
+uint16_t dap_volume = 0x0c0;
 bool dap_muted = true;
+uint8_t dap_loudnessPercent = 0;
 
 static bool dap_initInProgress = false;
 static SUCCESS_CALLBACK dap_initSuccessCallback = NULL;
@@ -338,7 +347,7 @@ bool DAP_ShutDown(SUCCESS_CALLBACK callback) {
 }
 
 void dap_startup_timer_callback(uintptr_t context) {
-    DAP_MUTE_N_Set();
+    if (!dap_muted) DAP_MUTE_N_Set();
     dap_shutDown = false;
     if (context) ((SUCCESS_CALLBACK)context)(true);
 }
@@ -379,6 +388,29 @@ bool DAP_Unmute(SUCCESS_CALLBACK callback) {
     } else return false;
 }
 
+void dap_loudnessCallback2(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+    if (success) {
+        uint32_t negGain = (buffer[1] << 24) | (buffer[2] << 16) | (buffer[3] << 8) | buffer[4];
+        dap_loudnessPercent = (-negGain * 100) >> 23;
+    }
+    if (context) ((SUCCESS_CALLBACK)context)(success);
+}
+
+void dap_loudnessCallback1(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+    if (success) {
+        uint32_t gain = (buffer[1] << 24) | (buffer[2] << 16) | (buffer[3] << 8) | buffer[4];
+        DAP_WriteWordCallback(0x94, -gain, dap_loudnessCallback2, context, 0);
+    } else if (context) ((SUCCESS_CALLBACK)context)(false);
+}
+
+bool DAP_SetLoudnessComp(uint8_t percent, SUCCESS_CALLBACK callback) {
+    if (dap_shutDown) return false;
+    if (dap_loudnessPercent == percent) return false;
+    uint32_t gain = ((uint32_t)percent << 23) / 100;
+    if (gain > 0x00800000) gain = 0x00800000;
+    return DAP_WriteWordCallback(0x93, gain, dap_loudnessCallback1, (uintptr_t)callback, 0);
+}
+
 /****************************/
 /* Initialization functions */
 /****************************/
@@ -404,32 +436,64 @@ void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength,
     switch (context) {
         case 0: return;
         case 1:
-            sendSuccess = DAP_WriteBufferCallback(0x47, (uint8_t*)inputMixerCfg, 32, dap_init_cmd_callback, 0, 0) //channel 7 input mixer
-                        && DAP_WriteBufferCallback(0x48, (uint8_t*)inputMixerCfg, 32, dap_init_cmd_callback, 2, 0); //channel 8 input mixer
+            sendSuccess = DAP_WriteByteCallback(0x14, 0x04, dap_init_cmd_callback, 2, 0); //input automute: -90dB threshold, 14.9ms delay
             break;
         case 2:
-            sendSuccess = DAP_WriteBufferCallback(0x7b, (uint8_t*)eqHifiOld_treble, 140, dap_init_cmd_callback, 0, 0) //channel 7 biquad coefficients
-                        && DAP_WriteBufferCallback(0x82, (uint8_t*)eqHifiOld_bass, 140, dap_init_cmd_callback, 3, 0); //channel 8 biquad coefficients
+            sendSuccess = DAP_WriteByteCallback(0x19, 0x22, dap_init_cmd_callback, 3, 0); //modulation limit: 97.7% for channels 7, 8
             break;
         case 3:
-            sendSuccess = DAP_WriteBufferCallback(0x8f, (uint8_t*)bassTrebleBypass, 8, dap_init_cmd_callback, 0, 0) //channel 7 bass/treble inline
-                        && DAP_WriteBufferCallback(0x90, (uint8_t*)bassTrebleBypass, 8, dap_init_cmd_callback, 0, 0) //channel 8 bass/treble inline
-                        && DAP_WriteWordCallback(0xd7, eqHifiOld_treble_volume, dap_init_cmd_callback, 4, 70); //channel 7 volume
+            sendSuccess = DAP_WriteByteCallback(0x27, 0x3f, dap_init_cmd_callback, 4, 0); //keep channels 1-6 in shutdown
             break;
         case 4:
-            sendSuccess = DAP_WriteWordCallback(0xd8, eqHifiOld_bass_volume, dap_init_cmd_callback, 5, 70); //channel 8 volume
+            sendSuccess = DAP_WriteBufferCallback(0x47, (uint8_t*)inputMixerCfg, 32, dap_init_cmd_callback, 5, 0); //channel 7 input mixer
             break;
         case 5:
-            sendSuccess = DAP_WriteWordCallback(0xd9, 0x098, dap_init_cmd_callback, 6, 70); //master volume (init to -20dB)
+            sendSuccess = DAP_WriteBufferCallback(0x48, (uint8_t*)inputMixerCfg, 32, dap_init_cmd_callback, 6, 0); //channel 8 input mixer
             break;
         case 6:
-            sendSuccess = DAP_WriteByteCallback(0x03, 0x80, dap_init_cmd_callback, 7, 0); //syscon1: soft unmute from error, enable channels
+            sendSuccess = DAP_WriteBufferCallback(0x7b, (uint8_t*)eqHifi_treble, 140, dap_init_cmd_callback, 7, 0); //channel 7 biquad coefficients
             break;
-        case 7: //init done
+        case 7:
+            sendSuccess = DAP_WriteBufferCallback(0x82, (uint8_t*)eqHifi_bass, 140, dap_init_cmd_callback, 8, 0); //channel 8 biquad coefficients
+            break;
+        case 8:
+            sendSuccess = DAP_WriteBufferCallback(0x8f, (uint8_t*)bassTrebleBypass, 8, dap_init_cmd_callback, 9, 0); //channel 7 bass/treble inline
+            break;
+        case 9:
+            sendSuccess = DAP_WriteBufferCallback(0x90, (uint8_t*)bassTrebleBypass, 8, dap_init_cmd_callback, 10, 0); //channel 8 bass/treble inline
+            break;
+        case 10:
+            sendSuccess = DAP_WriteWordCallback(0xd7, eqHifi_treble_volume + speakerPowerOffset, dap_init_cmd_callback, 11, 70); //channel 7 volume with power offset
+            break;
+        case 11:
+            sendSuccess = DAP_WriteWordCallback(0xd8, eqHifi_bass_volume + speakerPowerOffset, dap_init_cmd_callback, 12, 70); //channel 8 volume with power offset
+            break;
+        case 12:
+            sendSuccess = DAP_WriteBufferCallback(0x95, (uint8_t*)loudnessBiquad, 20, dap_init_cmd_callback, 13, 0); //loudness biquad
+            break;
+        case 13:
+            sendSuccess = DAP_WriteWordCallback(0x91, loudnessLG, dap_init_cmd_callback, 14, 0); //loudness log gain
+            break;
+        case 14:
+            sendSuccess = DAP_WriteWordCallback(0x92, loudnessLO, dap_init_cmd_callback, 15, 0); //loudness log offset
+            break;
+        case 15:
+            sendSuccess = DAP_WriteWordCallback(0x93, 0, dap_init_cmd_callback, 16, 0); //loudness gain (initially off)
+            break;
+        case 16:
+            sendSuccess = DAP_WriteWordCallback(0x94, 0, dap_init_cmd_callback, 17, 0); //loudness offset (initially 0)
+            break;
+        case 17:
+            sendSuccess = DAP_WriteWordCallback(0xd9, 0x0c0, dap_init_cmd_callback, 18, 70); //master volume (init to -30dB)
+            break;
+        case 18:
+            sendSuccess = DAP_WriteByteCallback(0x03, 0x80, dap_init_cmd_callback, 19, 0); //syscon1: soft unmute from error, enable channels
+            break;
+        case 19: //init done
             dap_initInProgress = false;
             dap_shutDown = false;
             dap_muted = true;
-            dap_volume = 0x098;
+            dap_volume = 0x0c0;
             if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(true);
             return;
     }
@@ -458,10 +522,7 @@ void dap_init_time_callback(uintptr_t context) {
             break;
         case 3: //reset done: do first writes
             dap_shutDown = false;
-            success = DAP_WriteByteCallback(0x04, 0x02, dap_init_cmd_callback, 0, 0) //syscon2: disable SDOUT
-                    && DAP_WriteByteCallback(0x14, 0x24, dap_init_cmd_callback, 0, 0) //input automute: -78dB threshold, 14.9ms delay
-                    && DAP_WriteByteCallback(0x19, 0x22, dap_init_cmd_callback, 0, 0) //modulation limit: 97.7% for channels 7, 8
-                    && DAP_WriteByteCallback(0x27, 0x3f, dap_init_cmd_callback, 1, 0); //channel shutdown: keep channels 1-6 shut down
+            success = DAP_WriteByteCallback(0x04, 0x02, dap_init_cmd_callback, 1, 0); //syscon2: disable SDOUT
             if (!success) {
                 dap_initInProgress = false;
                 if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(false);

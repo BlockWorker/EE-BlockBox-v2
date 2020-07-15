@@ -15,13 +15,29 @@
 #include "flash.h"
 #include "bm83.h"
 #include "dap.h"
+#include "light.h"
 #include "ui_touch_draws.h"
+#include "system/time/src/sys_time_local.h"
 
 /*****************************/
 /* Variables and definitions */
 /*****************************/
 
 #define UI_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
+#define UI_THEME_COLOR_BLUE 0x0040ff
+#define UI_THEME_COLOR_RED 0xb40000
+#define UI_THEME_COLOR_YELLOW 0xff6a00
+#define UI_THEME_COLOR_GREEN 0x007f0e
+
+typedef enum {
+    UI_NO_SETTINGS = 0,
+    UI_VOL_SETTINGS,
+    UI_FX_SETTINGS,
+    UI_DISP_SETTINGS,
+    UI_LIGHT_SETTINGS,
+    UI_POWER_SETTINGS,
+    UI_LINK_SETTINGS
+} UI_SETTINGS_TYPE;
 
 static SUCCESS_CALLBACK ui_initCallback;
 
@@ -31,8 +47,17 @@ static bool ui_touchLocked = false;
 static bool ui_touchDown = false;
 static bool ui_initialTouch = false;
 static bool ui_touchReleased = false;
+static bool ui_longTouch = false;
+static bool ui_longTouchTick = false;
+static uint32_t ui_nextTouchTickAt;
+static uint32_t ui_touchTickPause;
+
+static bool ui_screenUpdateNeeded = false;
+static bool ui_screenUpdating = false;
 
 uint32_t ui_themeColor = 0x0040ff;
+
+static UI_SETTINGS_TYPE ui_settingsType = UI_NO_SETTINGS;
 
 static uint16_t ui_touchX = 0x8000;
 static uint16_t ui_touchY = 0x8000;
@@ -42,7 +67,7 @@ static uint32_t ui_intPause;
 
 static uint16_t ui_minVolume = 0x110; //-50dB
 static uint16_t ui_maxVolume = 0x098; //-20dB
-static uint16_t ui_volumeStep = 0x004; //1dB step
+static uint16_t ui_volumeStep = 0x008; //2dB step
 
 /*************************/
 /* Calibration functions */
@@ -103,7 +128,7 @@ char* ui_volToString(uint16_t vol) {
 /****************************/
 
 void ui_drawStatusBar() {
-    uint16_t barSplitX = 16 * 314 - (uint16_t)(batteryPercent * 6.4);
+    //uint16_t barSplitX = 16 * 314 - (uint16_t)(batteryPercent * 6.4);
     char percentText[5] = { 0 };
     snprintf(percentText, 5, "%u%%", batteryPercent);
     //uint16_t percentOffset = batteryPercent < 10 ? 20 : batteryPercent < 100 ? 10 : 0;
@@ -121,23 +146,23 @@ void ui_drawStatusBar() {
     FT8_start_cmd(VERTEX2F(16 * 272, 16 * 16));
     FT8_start_cmd(VERTEX2F(16 * 272, 16 * 3));
     FT8_start_cmd(VERTEX2F(16 * 316, 16 * 21));
-    if (batteryDataValid) {
+    /*if (batteryDataValid) {
         FT8_cmd_color(0x000000);
         FT8_start_cmd(VERTEX2F(16 * 274, 16 * 5));
         FT8_start_cmd(VERTEX2F(barSplitX, 16 * 19));
         FT8_cmd_color(ui_themeColor);
         FT8_start_cmd(VERTEX2F(barSplitX, 16 * 5));
         FT8_start_cmd(VERTEX2F(16 * 314, 16 * 19));
-    } else {
+    } else {*/
         FT8_cmd_color(0x808080);
         FT8_start_cmd(VERTEX2F(16 * 274, 16 * 5));
         FT8_start_cmd(VERTEX2F(16 * 314, 16 * 19));
-    }
+    //}
     FT8_start_cmd(END());
     FT8_cmd_color(0xffffff);
     FT8_cmd_number(120, 2, 27, 0, batteryVoltageCountAverage);
-    if (batteryDataValid) FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, percentText);
-    else FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, "---%");
+    /*if (batteryDataValid) FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, percentText);
+    else*/ FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, "---%");
     //FT8_cmd_text(120, 2, 27, 0, voltageText);
     FT8_start_cmd(RESTORE_CONTEXT());
 }
@@ -187,7 +212,7 @@ void ui_drawMainScreen() {
     FT8_cmd_text(68, 216, 26, FT8_OPT_CENTERX, dap_muted ? "Mute" : ui_volToString(dap_volume));
     //remaining icons
     ui_drawBluetooth(133, 191);
-    ui_drawBulb(180, 191);
+    ui_drawBulb(180, 191, 0x000000);
     ui_drawCog(227, 191);
     ui_drawPowerOffButton(274, 191);
     //touch boxes (invisible)
@@ -228,6 +253,238 @@ void ui_drawMainScreen() {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
+void ui_drawSettingsTopBar() {
+    FT8_start_cmd(SAVE_CONTEXT());
+    //selected menu rectangle
+    uint16_t rectX;
+    switch (ui_settingsType) {
+        case UI_VOL_SETTINGS:
+            rectX = 12 * 16;
+            break;
+        case UI_FX_SETTINGS:
+            rectX = 57 * 16;
+            break;
+        case UI_DISP_SETTINGS:
+            rectX = 102 * 16;
+            break;
+        case UI_LIGHT_SETTINGS:
+            rectX = 147 * 16;
+            break;
+        case UI_POWER_SETTINGS:
+            rectX = 192 * 16;
+            break;
+        case UI_LINK_SETTINGS:
+            rectX = 237 * 16;
+            break;
+        default:
+            rectX = 12 * 16;
+            break;
+    }
+    FT8_start_cmd(BEGIN(FT8_RECTS));
+    FT8_start_cmd(LINE_WIDTH(80));
+    FT8_cmd_color(ui_themeColor);
+    FT8_start_cmd(VERTEX2F(rectX, 36 * 16));
+    FT8_start_cmd(VERTEX2F(rectX + 26 * 16, 62 * 16));
+    FT8_start_cmd(END());
+    //sub-op icons
+    ui_drawSpeaker40(6, 29, rectX == 12 * 16 ? ui_themeColor : 0x000000);
+    ui_drawBulb(140, 29, rectX == 147 * 16 ? ui_themeColor : 0x000000);
+    ui_drawLightning(185, 29);
+    ui_drawChain(230, 29, rectX == 237 * 16 ? ui_themeColor : 0x000000);
+    //screen icon border
+    FT8_start_cmd(BEGIN(FT8_LINE_STRIP));
+    FT8_start_cmd(LINE_WIDTH(16));
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(VERTEX2F(101 * 16 + 8, 36 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(128 * 16 + 8, 36 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(128 * 16 + 8, 56 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(101 * 16 + 8, 56 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(101 * 16 + 8, 36 * 16 + 8));
+    FT8_start_cmd(END());
+    //fx icon points
+    FT8_start_cmd(BEGIN(FT8_POINTS));
+    FT8_start_cmd(POINT_SIZE(64));
+    FT8_start_cmd(VERTEX2F(60 * 16, 57 * 16));
+    FT8_start_cmd(VERTEX2F(70 * 16, 41 * 16));
+    FT8_start_cmd(VERTEX2F(80 * 16, 49 * 16));
+    FT8_start_cmd(END());
+    //fx icon lines
+    FT8_start_cmd(BEGIN(FT8_LINES));
+    FT8_start_cmd(VERTEX2F(60 * 16, 35 * 16));
+    FT8_start_cmd(VERTEX2F(60 * 16, 63 * 16));
+    FT8_start_cmd(VERTEX2F(70 * 16, 35 * 16));
+    FT8_start_cmd(VERTEX2F(70 * 16, 63 * 16));
+    FT8_start_cmd(VERTEX2F(80 * 16, 35 * 16));
+    FT8_start_cmd(VERTEX2F(80 * 16, 63 * 16));
+    //screen icon lines
+    FT8_start_cmd(VERTEX2F(108 * 16, 61 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(122 * 16, 61 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(112 * 16 + 8, 56 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(112 * 16 + 8, 61 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(117 * 16 + 8, 56 * 16 + 8));
+    FT8_start_cmd(VERTEX2F(117 * 16 + 8, 61 * 16 + 8));
+    //close icon lines
+    FT8_start_cmd(VERTEX2F(283 * 16, 37 * 16));
+    FT8_start_cmd(VERTEX2F(307 * 16, 61 * 16));
+    FT8_start_cmd(VERTEX2F(283 * 16, 61 * 16));
+    FT8_start_cmd(VERTEX2F(307 * 16, 37 * 16));
+    //separator lines
+    FT8_cmd_color(0x808080);
+    FT8_start_cmd(VERTEX2F(47 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(47 * 16 + 8, 68 * 16));
+    FT8_start_cmd(VERTEX2F(92 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(92 * 16 + 8, 68 * 16));
+    FT8_start_cmd(VERTEX2F(137 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(137 * 16 + 8, 68 * 16));
+    FT8_start_cmd(VERTEX2F(182 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(182 * 16 + 8, 68 * 16));
+    FT8_start_cmd(VERTEX2F(227 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(227 * 16 + 8, 68 * 16));
+    FT8_start_cmd(VERTEX2F(272 * 16 + 8, 30 * 16));
+    FT8_start_cmd(VERTEX2F(272 * 16 + 8, 68 * 16));
+    FT8_start_cmd(END());
+    //touch boxes (invisible)
+    FT8_start_cmd(BEGIN(FT8_RECTS));
+    FT8_start_cmd(LINE_WIDTH(16));
+    FT8_start_cmd(COLOR_A(0));
+    FT8_start_cmd(TAG(30)); //volume tab
+    FT8_start_cmd(VERTEX2F(5 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(45 * 16, 69 * 16));
+    FT8_start_cmd(TAG(31)); //fx tab
+    FT8_start_cmd(VERTEX2F(50 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(90 * 16, 69 * 16));
+    FT8_start_cmd(TAG(32)); //disp tab
+    FT8_start_cmd(VERTEX2F(95 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(135 * 16, 69 * 16));
+    FT8_start_cmd(TAG(33)); //light tab
+    FT8_start_cmd(VERTEX2F(140 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(180 * 16, 69 * 16));
+    FT8_start_cmd(TAG(34)); //power tab
+    FT8_start_cmd(VERTEX2F(185 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(225 * 16, 69 * 16));
+    FT8_start_cmd(TAG(35)); //link tab
+    FT8_start_cmd(VERTEX2F(230 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(270 * 16, 69 * 16));
+    FT8_start_cmd(TAG(39)); //close settings
+    FT8_start_cmd(VERTEX2F(275 * 16, 29 * 16));
+    FT8_start_cmd(VERTEX2F(315 * 16, 69 * 16));
+    FT8_start_cmd(END());
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawVolSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    //controls
+    FT8_cmd_fgcolor(ui_themeColor);
+    FT8_cmd_bgcolor(0x808080);
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(TAG(40)); //volume sync switch
+    FT8_cmd_toggle(216, 92, 30, 26, 0, bm83_abs_vol_supported ? 0xffff : 0, "No\xffYes");
+    FT8_start_cmd(TAG(41)); //min volume slider
+    FT8_cmd_slider(57, 138, 205, 11, 0, 15 - ((ui_minVolume - 0x0C0) / ui_volumeStep), 15); //TODO: calc is temporary
+    FT8_cmd_track(52, 133, 215, 21, 41);
+    FT8_start_cmd(TAG(42)); //max volume slider
+    FT8_cmd_slider(57, 175, 205, 11, 0, 15 - ((ui_maxVolume - 0x048) / ui_volumeStep), 15); //TODO: calc is temporary
+    FT8_cmd_track(52, 170, 215, 21, 42);
+    FT8_start_cmd(TAG(43)); //volume step slider
+    FT8_cmd_slider(57, 212, 205, 11, 0, 4, 5); //TODO: implement
+    FT8_cmd_track(52, 207, 215, 21, 43);
+    //text
+    FT8_start_cmd(TAG(0));
+    FT8_cmd_text(190, 97, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Sync with phone");
+    FT8_cmd_text(40, 143, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Min");
+    FT8_cmd_text(40, 180, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Max");
+    FT8_cmd_text(40, 217, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Step");
+    FT8_cmd_text(277, 143, 26, FT8_OPT_CENTERY, ui_volToString(ui_minVolume));
+    FT8_cmd_text(277, 180, 26, FT8_OPT_CENTERY, ui_volToString(ui_maxVolume));
+    FT8_cmd_text(277, 217, 26, FT8_OPT_CENTERY, "2dB"); //TODO: implement
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawFxSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    //controls
+    FT8_cmd_fgcolor(ui_themeColor);
+    FT8_cmd_bgcolor(0x808080);
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(TAG(50)); //eq mode switch
+    FT8_cmd_toggle(225, 90, 30, 26, 0, 0, "HiFi\xffPower");
+    FT8_start_cmd(TAG(51)); //loudness slider
+    char percentText[5] = { 0 };
+    snprintf(percentText, 5, "%u%%", dap_loudnessPercent);
+    //FT8_cmd_toggle(225, 124, 30, 26, 0, dap_loudnessPercent ? 0xffff : 0, "Off\xffOn");
+    FT8_cmd_slider(78, 128, 178, 11, 0, dap_loudnessPercent, 100);
+    FT8_cmd_track(72, 123, 188, 21, 51);
+    FT8_start_cmd(TAG(52)); //bass slider
+    FT8_cmd_slider(66, 165, 190, 11, 0, 10, 20);
+    FT8_cmd_track(61, 160, 200, 21, 52);
+    FT8_start_cmd(TAG(53)); //treble slider
+    FT8_cmd_slider(66, 202, 190, 11, 0, 10, 20);
+    FT8_cmd_track(61, 197, 200, 21, 53);
+    //text
+    FT8_start_cmd(TAG(0));
+    FT8_cmd_text(205, 95, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "EQ Mode");
+    FT8_cmd_text(64, 133, 26, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Loudness");
+    FT8_cmd_text(52, 170, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Bass");
+    FT8_cmd_text(52, 207, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Treble");
+    FT8_cmd_text(270, 170, 26, FT8_OPT_CENTERY, "0dB");
+    FT8_cmd_text(270, 207, 26, FT8_OPT_CENTERY, "0dB");
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawDispSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawLightSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    //controls
+    FT8_cmd_fgcolor(ui_themeColor);
+    FT8_cmd_bgcolor(0x808080);
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(TAG(70)); //light switch
+    FT8_cmd_toggle(185, 90, 30, 26, 0, light_on ? 0xffff : 0, "Off\xffOn");
+    FT8_start_cmd(TAG(71)); //s2l switch
+    FT8_cmd_toggle(185, 134, 30, 26, 0, light_s2l ? 0xffff : 0, "Off\xffOn");
+    FT8_start_cmd(TAG(72)); //light brightness slider
+    FT8_cmd_slider(67, 192, 220, 11, 0, (uint16_t)(light_brightness * 400.f), 100);
+    FT8_cmd_track(62, 187, 230, 21, 72);
+    //text
+    FT8_start_cmd(TAG(0));
+    FT8_cmd_text(165, 95, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Light");
+    FT8_cmd_text(165, 129, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Sound-to-light");
+    ui_drawLightIcon(9, 177);
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawPowerSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawLinkSettings() {
+    ui_drawSettingsTopBar();
+    FT8_start_cmd(SAVE_CONTEXT());
+    
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_screenDrawFallbackCb(uintptr_t context) {
+    ui_screenUpdating = false;
+}
+
+void ui_screenDrawFinishCb(bool success, uintptr_t context) {
+    ui_screenUpdating = false;
+}
+
 void ui_drawScreen() {
     FT8_cmd_begindisplay(true, true, true, 0x000000);
     
@@ -243,7 +500,20 @@ void ui_drawScreen() {
             ui_drawBigOnButton();
             break;
         default:
-            ui_drawMainScreen();
+            switch (ui_settingsType) {
+                case UI_VOL_SETTINGS:
+                    ui_drawVolSettings();
+                    break;
+                case UI_FX_SETTINGS:
+                    ui_drawFxSettings();
+                    break;
+                case UI_LIGHT_SETTINGS:
+                    ui_drawLightSettings();
+                    break;
+                default:
+                    ui_drawMainScreen();
+                    break;
+            }
             break;
     }
     
@@ -257,6 +527,9 @@ void ui_drawScreen() {
 #endif    
     
     FT8_cmd_enddisplay();
+    //ui_screenUpdating = true;
+    //SYS_TIME_CallbackRegisterMS(ui_screenDrawFallbackCb, 0, 100, SYS_TIME_SINGLE);
+    //FT8_cmd_execute(ui_screenDrawFinishCb, NULL);
     FT8_cmd_start();
 }
 
@@ -266,32 +539,97 @@ void ui_drawScreen() {
 
 void ui_unlockTouch(bool success) {
     ui_touchLocked = false;
-    ui_drawScreen();
+    ui_screenUpdateNeeded = true;
+}
+
+//requires both power up/power down commands to go through before unlocking touch and redrawing
+void ui_powerUpDownLock(bool success) {
+    static bool triggeredOnce = false;
+    if (triggeredOnce) {
+        triggeredOnce = false;
+        ui_unlockTouch(true);
+    } else {
+        triggeredOnce = true;
+    }
+}
+
+void ui_setVol(uint16_t newVol, SUCCESS_CALLBACK cb) {
+    if (newVol != dap_volume) DAP_SetVolume(newVol, cb);
+    if (bm83_abs_vol_supported) {
+        uint8_t absVol = ((uint32_t)(ui_minVolume - newVol) * (uint32_t)0x7F) / (uint32_t)(ui_minVolume - ui_maxVolume);
+        BM83_SetAbsVolume(absVol, NULL);
+    }
 }
 
 void ui_trackReadCallback(bool success, uint32_t data, uintptr_t context) {
     if (!success) return;
     
     uint16_t tag = data & 0xffff;
-    if (tag == 0) return;
-    
-    //uint16_t value = data >> 16;
+    uint32_t value = data >> 16;
     
     switch (tag) {
-        
+        case 41:
+            value = value * 16 / 0xffff;
+            if (value > 15) value = 15;
+            ui_minVolume = 0x0C0 + ui_volumeStep * (15 - value);
+            uint16_t newVol1 = dap_volume;
+            if (newVol1 > ui_minVolume) newVol1 = ui_minVolume;
+            ui_setVol(newVol1, NULL);
+            break;
+        case 42:
+            value = value * 16 / 0xffff;
+            if (value > 15) value = 15;
+            ui_maxVolume = 0x048 + ui_volumeStep * (15 - value);
+            uint16_t newVol2 = dap_volume;
+            if (newVol2 < ui_maxVolume) newVol2 = ui_maxVolume;
+            ui_setVol(newVol2, NULL);
+            break;
+        case 51:
+            value = value * 101 / 0xffff;
+            if (value > 100) value = 100;
+            DAP_SetLoudnessComp(value, NULL);
+            break;
+        case 72:
+            value = value * 101 / 0xffff;
+            if (value > 100) value = 100;
+            light_brightness = (float)value / 400.f;
+            break;
+        default:
+            ui_touchLocked = false;
+            return;
     }
+    
+    ui_touchLocked = false;
+    ui_screenUpdateNeeded = true;
 }
 
 void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
     if (success) {
-        if (!ui_touchReleased) ui_touchedTag = data;
+        if (!ui_touchReleased) {
+            uint32_t tick = SYS_TIME_CounterGet();
+            
+            if (ui_touchedTag != data) {
+                ui_longTouch = false;
+                ui_longTouchTick = false;
+                ui_nextTouchTickAt = tick + 3 * ui_touchTickPause;
+            } else if (tick - ui_nextTouchTickAt < UI_TIMEOUT_MAX_DIFF) {
+                ui_longTouch = true;
+                ui_longTouchTick = true;
+                ui_nextTouchTickAt = tick + ui_touchTickPause;
+            }                
+            ui_touchedTag = data;
+        }
 
         switch (ui_touchedTag) {
             case 1: //power on
                 if (ui_initialTouch) {
+                    if (bm83_state != BM83_OFF) {
+                        ui_screenUpdateNeeded = true;
+                        break;
+                    }
                     ui_touchLocked = true;
                     DAP_StartUp(ui_unlockTouch);
-                    BM83_PowerOn(NULL);
+                    BM83_PowerOn(ui_unlockTouch);
                 }
                 break;
             case 10: //previous
@@ -313,14 +651,10 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                 }
                 break;
             case 13: //volume -
-                if (ui_initialTouch && !dap_muted && dap_volume < ui_minVolume) {
+                if ((ui_initialTouch || ui_longTouchTick) && !dap_muted && dap_volume < ui_minVolume) {
                     ui_touchLocked = true;
-                    uint16_t newVol = dap_volume + 0x4;
-                    DAP_SetVolume(newVol, ui_unlockTouch);
-                    if (bm83_abs_vol_supported) {
-                        uint8_t absVol = ((uint32_t)(ui_minVolume - newVol) * (uint32_t)0x7F) / (uint32_t)(ui_minVolume - ui_maxVolume);
-                        BM83_SetAbsVolume(absVol, NULL);
-                    }
+                    uint16_t newVol = dap_volume + ui_volumeStep;
+                    ui_setVol(newVol, ui_unlockTouch);
                 }
                 break;
             case 14: //mute/unmute
@@ -331,14 +665,10 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                 }
                 break;
             case 15: //volume +
-                if (ui_initialTouch && !dap_muted && dap_volume > ui_maxVolume) {
+                if ((ui_initialTouch || ui_longTouchTick) && !dap_muted && dap_volume > ui_maxVolume) {
                     ui_touchLocked = true;
-                    uint16_t newVol = dap_volume - 0x4;
-                    DAP_SetVolume(newVol, ui_unlockTouch);
-                    if (bm83_abs_vol_supported) {
-                        uint8_t absVol = ((uint32_t)(ui_minVolume - newVol) * (uint32_t)0x7F) / (uint32_t)(ui_minVolume - ui_maxVolume);
-                        BM83_SetAbsVolume(absVol, NULL);
-                    }
+                    uint16_t newVol = dap_volume - ui_volumeStep;
+                    ui_setVol(newVol, ui_unlockTouch);
                 }
                 break;
             case 16: //pairing
@@ -349,21 +679,81 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                     else BM83_EnterPairing(ui_unlockTouch);
                 }
                 break;
+            case 17:
+            case 70:
+                if (ui_initialTouch) {
+                    if (light_on) Light_Off();
+                    else Light_On();
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 18:
+            case 30:
+                if (ui_initialTouch) {
+                    ui_settingsType = UI_VOL_SETTINGS;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
             case 19: //power off
                 if (ui_touchReleased) {
+                    if (bm83_state == BM83_OFF) {
+                        ui_screenUpdateNeeded = true;
+                        break;
+                    }
                     ui_touchLocked = true;
                     DAP_ShutDown(ui_unlockTouch);
-                    BM83_PowerOff(NULL);
+                    BM83_PowerOff(ui_unlockTouch);
+                }
+                break;
+            case 31:
+                if (ui_initialTouch) {
+                    ui_settingsType = UI_FX_SETTINGS;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 33:
+                if (ui_initialTouch) {
+                    ui_settingsType = UI_LIGHT_SETTINGS;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 39:
+                if (ui_initialTouch) {
+                    ui_settingsType = UI_NO_SETTINGS;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 71:
+                if (ui_initialTouch) {
+                    if (light_s2l) Light_S2L_Disable();
+                    else Light_S2L_Enable();
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 41:
+            case 42:
+            case 43:
+            case 51:
+            case 52:
+            case 53:
+            case 72:
+                if (!ui_touchReleased) {
+                    ui_touchLocked = true;
+                    FT8_memRead32(REG_TRACKER, ui_trackReadCallback, NULL);
                 }
                 break;
             default:
                 break;
         }
 
-        if (ui_touchReleased) ui_touchedTag = 0;
+        if (ui_touchReleased) {
+            ui_touchedTag = 0;
+            ui_longTouch = false;
+        }
     }
     ui_initialTouch = false;
     ui_touchReleased = false;
+    ui_longTouchTick = false;
 }
 
 void ui_touchCoordReadCallback(bool success, uint32_t data, uintptr_t context) {
@@ -381,6 +771,7 @@ void ui_touchReadCallback(bool success, uint32_t data, uintptr_t context) {
         FT8_memWrite8(REG_INT_MASK, 0x82);
         ui_touchDown = true;
         ui_initialTouch = true;
+        ui_nextTouchTickAt = SYS_TIME_CounterGet() + 3 * ui_touchTickPause;
     } else if (!newTouched && ui_touchDown) {
         FT8_memWrite8(REG_INT_MASK, 0x02);
         ui_touchDown = false;
@@ -391,7 +782,7 @@ void ui_touchReadCallback(bool success, uint32_t data, uintptr_t context) {
 }
 
 void ui_doScreenDraw(bool success) {
-    ui_drawScreen();
+    ui_screenUpdateNeeded = true;
 }
 
 void ui_bm83StateChange(BM83_STATE_CHANGE_TYPE changeType) {
@@ -409,7 +800,7 @@ void ui_bm83StateChange(BM83_STATE_CHANGE_TYPE changeType) {
         default: break;
     }
     
-    ui_drawScreen();
+    ui_screenUpdateNeeded = true;
 }
 
 void ui_touchSafetyUnlock(uintptr_t context) {
@@ -435,11 +826,14 @@ void UI_Tasks() {
         }
     }
     
-    
-    if (batteryUpdated) {
+    /*if (ui_screenUpdateNeeded && !ui_screenUpdating) {
         ui_drawScreen();
-        batteryUpdated = false;
-    }
+        ui_screenUpdateNeeded = false;
+    }*/
+}
+
+void ui_updateScreenLoop(uintptr_t context) {
+    ui_drawScreen();
 }
 
 /****************************/
@@ -450,7 +844,8 @@ void UI_IO_Init() {
     FT8_IO_Init();
     //SYS_INT_SourceEnable(INT_SOURCE_EXTERNAL_4);
     
-    ui_intPause = SYS_TIME_MSToCount(100);
+    ui_intPause = SYS_TIME_MSToCount(50);
+    ui_touchTickPause = SYS_TIME_MSToCount(400);
 }
 
 void ui_ftInitCallback(bool success) {
@@ -462,13 +857,14 @@ void ui_ftInitCallback(bool success) {
     FT8_memWrite8(REG_INT_EN, 0x01);
     FT8_memRead8(REG_INT_FLAGS, NULL, NULL);
     ui_writeOrCalibrateTouch();
-    ui_drawScreen();
+    //ui_drawScreen();
     BM83_SetStateChangeCallback(ui_bm83StateChange);
     if (ui_initCallback != NULL) ui_initCallback(true);
     
     ui_nextIntAt = SYS_TIME_CounterGet();
     
     SYS_TIME_CallbackRegisterMS(ui_touchSafetyUnlock, 0, 5000, SYS_TIME_PERIODIC);
+    SYS_TIME_CallbackRegisterMS(ui_updateScreenLoop, 0, 100, SYS_TIME_PERIODIC);
 }
 
 void UI_Main_Init(SUCCESS_CALLBACK cb) {

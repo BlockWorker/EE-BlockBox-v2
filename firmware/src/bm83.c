@@ -8,7 +8,7 @@
 /*****************************/
 
 #define UART_RECEIVE_BUFFER_LEN 0x2000
-#define UART_RECEIVE_BUFFER_PHYS_LOC 0x4000
+#define UART_RECEIVE_BUFFER_PHYS_LOC 0x12000
 #define UART_RECEIVE_BUFFER_VIRT_LOC (UART_RECEIVE_BUFFER_PHYS_LOC | 0x80000000)
 #define UART_TIMEOUT_MAX_DIFF 100000000 //difference (tick - timeoutTick) is compared to this, greater than this means not timed out (very high value means negative difference)
 

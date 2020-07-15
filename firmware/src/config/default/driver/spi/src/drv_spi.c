@@ -186,6 +186,7 @@ static void _DRV_SPI_EnableInterrupts(DRV_SPI_OBJ* dObj)
 
 static bool _DRV_SPI_ResourceLock(DRV_SPI_OBJ * dObj)
 {
+    return true;
     /* We will allow buffers to be added in the interrupt context of the SPI
      * driver. But we must make sure that if we are inside interrupt, then we
      * should not modify mutexes. */

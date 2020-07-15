@@ -36,7 +36,7 @@
           <LogicalPath dnOrder="2">config/default/driver/spi/</LogicalPath>
           <PhysicalPath dnOrder="3">/driver/spi/src/</PhysicalPath>
           <GeneratedChecksum dnOrder="4">36C6C61558FA821C07445AF866ED35F4</GeneratedChecksum>
-          <UserChecksum dnOrder="5">36C6C61558FA821C07445AF866ED35F4</UserChecksum>
+          <UserChecksum dnOrder="5">E5AB46F15956109127D3E9329DE1B326</UserChecksum>
         </File>
         <File dnOrder="4">
           <Type dnOrder="0">SOURCE</Type>
@@ -84,7 +84,7 @@
           <LogicalPath dnOrder="2">config/default/</LogicalPath>
           <PhysicalPath dnOrder="3">/</PhysicalPath>
           <GeneratedChecksum dnOrder="4">EC02963E75A2A26ED681BD63A0613005</GeneratedChecksum>
-          <UserChecksum dnOrder="5">B295BFEF4F73A3AD748F6ABE82B28218</UserChecksum>
+          <UserChecksum dnOrder="5">1A1178DC93C6FB19A15103023F51341D</UserChecksum>
         </File>
         <File dnOrder="10">
           <Type dnOrder="0">SOURCE</Type>
@@ -108,7 +108,7 @@
           <LogicalPath dnOrder="2">config/default/peripheral/clk/</LogicalPath>
           <PhysicalPath dnOrder="3">/peripheral/clk/</PhysicalPath>
           <GeneratedChecksum dnOrder="4">EBF3F7C2B66AA1D5DA6DD9163F2DE821</GeneratedChecksum>
-          <UserChecksum dnOrder="5">EBF3F7C2B66AA1D5DA6DD9163F2DE821</UserChecksum>
+          <UserChecksum dnOrder="5">0A3792DFCA3B79FDA72E4654D1C4A9BE</UserChecksum>
         </File>
         <File dnOrder="13">
           <Type dnOrder="0">SOURCE</Type>
@@ -203,16 +203,16 @@
           <Name dnOrder="1">plib_spi2.c</Name>
           <LogicalPath dnOrder="2">config/default/peripheral/spi/</LogicalPath>
           <PhysicalPath dnOrder="3">/peripheral/spi/</PhysicalPath>
-          <GeneratedChecksum dnOrder="4">FD074FEF1737A0C8D14BA904BDCDF23F</GeneratedChecksum>
-          <UserChecksum dnOrder="5">FD074FEF1737A0C8D14BA904BDCDF23F</UserChecksum>
+          <GeneratedChecksum dnOrder="4">676176D0A037E0EDDAEA04F725A54088</GeneratedChecksum>
+          <UserChecksum dnOrder="5">676176D0A037E0EDDAEA04F725A54088</UserChecksum>
         </File>
         <File dnOrder="25">
           <Type dnOrder="0">SOURCE</Type>
           <Name dnOrder="1">plib_tmr2.c</Name>
           <LogicalPath dnOrder="2">config/default/peripheral/tmr/</LogicalPath>
           <PhysicalPath dnOrder="3">/peripheral/tmr/</PhysicalPath>
-          <GeneratedChecksum dnOrder="4">D5CD1A268C1301278444FA6105E08755</GeneratedChecksum>
-          <UserChecksum dnOrder="5">D5CD1A268C1301278444FA6105E08755</UserChecksum>
+          <GeneratedChecksum dnOrder="4">F090615DE1C559D905D68311E3B958C6</GeneratedChecksum>
+          <UserChecksum dnOrder="5">F090615DE1C559D905D68311E3B958C6</UserChecksum>
         </File>
         <File dnOrder="26">
           <Type dnOrder="0">SOURCE</Type>
@@ -339,8 +339,8 @@
           <Name dnOrder="1">configuration.h</Name>
           <LogicalPath dnOrder="2">config/default/</LogicalPath>
           <PhysicalPath dnOrder="3">/</PhysicalPath>
-          <GeneratedChecksum dnOrder="4">A9A8C0EC3D5457FDA00DF74B033DC055</GeneratedChecksum>
-          <UserChecksum dnOrder="5">A9A8C0EC3D5457FDA00DF74B033DC055</UserChecksum>
+          <GeneratedChecksum dnOrder="4">73EE2D0D4BFCFAC9D6B949FAA21AD910</GeneratedChecksum>
+          <UserChecksum dnOrder="5">33DE95685AFBEE74D88CF633F061433A</UserChecksum>
         </File>
         <File dnOrder="42">
           <Type dnOrder="0">HEADER</Type>

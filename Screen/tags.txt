@@ -14,3 +14,36 @@
   - 18: settings
   - 19: power down
   - 20: player seek?
+30-39: settings general
+  - 30: volume tab
+  - 31: fx tab
+  - 32: display tab
+  - 33: light tab
+  - 34: power tab
+  - 35: link tab
+  - 39: close settings
+40-49: volume settings
+  - 40: sync switch
+  - 41: min vol slider
+  - 42: max vol slider
+  - 43: vol step slider
+50-59: fx settings
+  - 50: eq mode switch
+  - 51: loudness switch
+  - 52: bass slider
+  - 53: treble slider
+60-69: display settings
+  - 60: display brightness slider
+  - 61: sleep delay slider
+  - 62: blue theme
+  - 63: red theme
+  - 64: yellow theme
+  - 65: green theme
+  - 66: calibrate touch
+70-79: light settings
+  - 70: light switch
+  - 71: s2l switch
+  - 72: light brightness slider
+80-89: power settings
+  - 80: power limit slider
+90-99: link settings

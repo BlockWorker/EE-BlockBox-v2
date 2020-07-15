@@ -3460,12 +3460,7 @@
           </Values>
         </Combo>
         <Combo dnOrder="605" id="SYS_PORT_PPS_INPUT_FUNCTION_4">
-          <Attributes dnOrder="0">
-            <Boolean dnOrder="0" id="visible">
-              <Value dnOrder="0">false</Value>
-            </Boolean>
-          </Attributes>
-          <Values dnOrder="1">
+          <Values dnOrder="0">
             <User dnOrder="0" value="INT4"/>
           </Values>
         </Combo>
@@ -3520,12 +3515,7 @@
           </Values>
         </KeyValueSet>
         <KeyValueSet dnOrder="611" id="SYS_PORT_PPS_INPUT_PIN_4">
-          <Attributes dnOrder="0">
-            <Boolean dnOrder="0" id="visible">
-              <Value dnOrder="0">false</Value>
-            </Boolean>
-          </Attributes>
-          <Values dnOrder="1">
+          <Values dnOrder="0">
             <User dnOrder="0" value="15"/>
           </Values>
         </KeyValueSet>
@@ -4183,7 +4173,7 @@
             </String>
             <Integer dnOrder="3" id="DRV_SPI_QUEUE_SIZE">
               <Values dnOrder="0">
-                <User dnOrder="0" value="32"/>
+                <User dnOrder="0" value="64"/>
               </Values>
             </Integer>
             <Integer dnOrder="4" id="DRV_SPI_RX_DMA_CHANNEL">
@@ -4670,12 +4660,12 @@
       <Symbols dnOrder="0">
         <Integer dnOrder="0" id="SPI_BAUD_RATE">
           <Values dnOrder="0">
-            <User dnOrder="0" value="1000000"/>
+            <User dnOrder="0" value="500000"/>
           </Values>
         </Integer>
         <Integer dnOrder="1" id="SPI_BRG_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="spi2" value="49"/>
+            <Dynamic dnOrder="0" id="spi2" value="98"/>
           </Values>
         </Integer>
         <Boolean dnOrder="2" id="SPI_INTERRUPT_MODE">
@@ -4828,32 +4818,32 @@
       <Symbols dnOrder="0">
         <Hex dnOrder="0" id="TCON_REG_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="tmr2" value="48"/>
+            <Dynamic dnOrder="0" id="tmr2" value="0"/>
           </Values>
         </Hex>
         <Integer dnOrder="1" id="TIMER_CLOCK_FREQ">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="tmr2" value="6187500"/>
+            <Dynamic dnOrder="0" id="tmr2" value="49500000"/>
           </Values>
         </Integer>
         <Long dnOrder="2" id="TIMER_PERIOD">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="tmr2" value="254"/>
+            <Dynamic dnOrder="0" id="tmr2" value="2046"/>
           </Values>
         </Long>
         <KeyValueSet dnOrder="3" id="TIMER_PRE_SCALER">
           <Values dnOrder="0">
-            <User dnOrder="0" value="4"/>
+            <User dnOrder="0" value="7"/>
           </Values>
         </KeyValueSet>
         <Float dnOrder="4" id="TIMER_TIME_PERIOD_MS">
           <Attributes dnOrder="0">
             <Float dnOrder="0" id="max">
-              <Value dnOrder="0">10.591516</Value>
+              <Value dnOrder="0">1.3239394</Value>
             </Float>
           </Attributes>
           <Values dnOrder="1">
-            <User dnOrder="0" value="0.0412"/>
+            <User dnOrder="0" value="0.04134"/>
           </Values>
         </Float>
         <Boolean dnOrder="5" id="TMR_INTERRUPT_MODE">
@@ -4863,7 +4853,7 @@
         </Boolean>
         <Integer dnOrder="6" id="TMR_PRESCALER_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="tmr2" value="8"/>
+            <Dynamic dnOrder="0" id="tmr2" value="1"/>
           </Values>
         </Integer>
         <Boolean dnOrder="7" id="TMR_SLAVE_INTERRUPT_MODE">
@@ -4960,12 +4950,12 @@
         <ElementPosition dnOrder="7" id="drv_usart" x="610" y="120"/>
         <ElementPosition dnOrder="8" id="i2c1" x="453" y="451"/>
         <ElementPosition dnOrder="9" id="nvm" x="49" y="371"/>
-        <ElementPosition dnOrder="10" id="ocmp2" x="36" y="68"/>
+        <ElementPosition dnOrder="10" id="ocmp2" x="38" y="71"/>
         <ElementPosition dnOrder="11" id="ocmp5" x="38" y="113"/>
         <ElementPosition dnOrder="12" id="ocmp6" x="39" y="156"/>
-        <ElementPosition dnOrder="13" id="ocmp7" x="186" y="74"/>
+        <ElementPosition dnOrder="13" id="ocmp7" x="186" y="75"/>
         <ElementPosition dnOrder="14" id="ocmp9" x="188" y="114"/>
-        <ElementPosition dnOrder="15" id="spi2" x="51" y="271"/>
+        <ElementPosition dnOrder="15" id="spi2" x="51" y="272"/>
         <ElementPosition dnOrder="16" id="sys_console" x="163" y="440"/>
         <ElementPosition dnOrder="17" id="sys_debug" x="304" y="472"/>
         <ElementPosition dnOrder="18" id="sys_time" x="371" y="320"/>

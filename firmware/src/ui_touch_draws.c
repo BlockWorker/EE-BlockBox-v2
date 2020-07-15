@@ -133,12 +133,12 @@ void ui_drawSpeaker28(uint16_t x, uint16_t y) {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
-void ui_drawSpeaker40(uint16_t x, uint16_t y) {
+void ui_drawSpeaker40(uint16_t x, uint16_t y, uint32_t bgColor) {
     //setup
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
     FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
-    FT8_cmd_scissor(x, y, 40, 40);
+    FT8_cmd_scissor(x + 4, y, 36, 40);
     //right wave: outer
     FT8_start_cmd(BEGIN(FT8_POINTS));
     FT8_start_cmd(POINT_SIZE(240));
@@ -146,7 +146,7 @@ void ui_drawSpeaker40(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(320, 320));
     //right wave: inner
     FT8_start_cmd(POINT_SIZE(208));
-    FT8_cmd_color(0x000000);
+    FT8_cmd_color(bgColor);
     FT8_start_cmd(VERTEX2F(320, 320));
     //middle wave: outer
     FT8_start_cmd(POINT_SIZE(184));
@@ -154,7 +154,7 @@ void ui_drawSpeaker40(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(303, 320));
     //middle wave: inner
     FT8_start_cmd(POINT_SIZE(152));
-    FT8_cmd_color(0x000000);
+    FT8_cmd_color(bgColor);
     FT8_start_cmd(VERTEX2F(303, 320));
     //left wave: outer
     FT8_start_cmd(POINT_SIZE(128));
@@ -162,15 +162,15 @@ void ui_drawSpeaker40(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(282, 320));
     //left wave: inner
     FT8_start_cmd(POINT_SIZE(96));
-    FT8_cmd_color(0x000000);
+    FT8_cmd_color(bgColor);
     FT8_start_cmd(VERTEX2F(282, 320));
     FT8_start_cmd(END());
     //wave cutoff
     FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
     FT8_start_cmd(LINE_WIDTH(8));
-    FT8_start_cmd(VERTEX2F(438, 92));
+    FT8_start_cmd(VERTEX2F(457, 68));
     FT8_start_cmd(VERTEX2F(260, 320));
-    FT8_start_cmd(VERTEX2F(438, 548));
+    FT8_start_cmd(VERTEX2F(457, 571));
     FT8_start_cmd(END());
     //body rect
     FT8_start_cmd(BEGIN(FT8_RECTS));
@@ -182,13 +182,13 @@ void ui_drawSpeaker40(uint16_t x, uint16_t y) {
     //body cutouts
     FT8_start_cmd(BEGIN(FT8_EDGE_STRIP_L));
     FT8_start_cmd(LINE_WIDTH(8));
-    FT8_cmd_color(0x000000);
-    FT8_start_cmd(VERTEX2F(264, 103));
+    FT8_cmd_color(bgColor);
+    FT8_start_cmd(VERTEX2F(278, 89));
     FT8_start_cmd(VERTEX2F(168, 199));
     FT8_start_cmd(VERTEX2F(65, 199));
     FT8_start_cmd(VERTEX2F(65, 440));
     FT8_start_cmd(VERTEX2F(168, 440));
-    FT8_start_cmd(VERTEX2F(264, 537));
+    FT8_start_cmd(VERTEX2F(278, 551));
     FT8_start_cmd(END());
     //cleanup
     FT8_start_cmd(RESTORE_CONTEXT());
@@ -224,7 +224,7 @@ void ui_drawPowerOffButton(uint16_t x, uint16_t y) {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
-void ui_drawBulb(uint16_t x, uint16_t y) {
+void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor) {
     //setup
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
@@ -236,7 +236,7 @@ void ui_drawBulb(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(320, 321));
     //inner cirle
     FT8_start_cmd(POINT_SIZE(97));
-    FT8_cmd_color(0x000000);
+    FT8_cmd_color(bgColor);
     FT8_start_cmd(VERTEX2F(320, 321));
     FT8_start_cmd(END());
     //circle cut
@@ -278,7 +278,7 @@ void ui_drawBulb(uint16_t x, uint16_t y) {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
-void ui_drawChain(uint16_t x, uint16_t y) {
+void ui_drawChain(uint16_t x, uint16_t y, uint32_t bgColor) {
     //setup
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
@@ -293,7 +293,7 @@ void ui_drawChain(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(461, 461));
     //inner lines
     FT8_start_cmd(LINE_WIDTH(56));
-    FT8_cmd_color(0x000000);
+    FT8_cmd_color(bgColor);
     FT8_start_cmd(VERTEX2F(178, 178));
     FT8_start_cmd(VERTEX2F(239, 239));
     FT8_start_cmd(VERTEX2F(400, 400));
@@ -676,6 +676,45 @@ void ui_drawPauseButton(uint16_t x, uint16_t y) {
     FT8_start_cmd(VERTEX2F(495, 126));
     FT8_start_cmd(VERTEX2F(593, 674));
     FT8_start_cmd(END());
+    //cleanup
+    FT8_start_cmd(RESTORE_CONTEXT());
+}
+
+void ui_drawLightIcon(uint16_t x, uint16_t y) {
+    //setup
+    FT8_start_cmd(SAVE_CONTEXT());
+    FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
+    FT8_start_cmd(VERTEX_TRANSLATE_Y(16 * y));
+    //lines
+    FT8_start_cmd(BEGIN(FT8_LINES));
+    FT8_start_cmd(LINE_WIDTH(16));
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(VERTEX2F(320, 87));
+    FT8_start_cmd(VERTEX2F(320, 156));
+    FT8_start_cmd(VERTEX2F(443, 197));
+    FT8_start_cmd(VERTEX2F(492, 148));
+    FT8_start_cmd(VERTEX2F(484, 320));
+    FT8_start_cmd(VERTEX2F(553, 320));
+    FT8_start_cmd(VERTEX2F(443, 443));
+    FT8_start_cmd(VERTEX2F(492, 492));
+    FT8_start_cmd(VERTEX2F(320, 484));
+    FT8_start_cmd(VERTEX2F(320, 553));
+    FT8_start_cmd(VERTEX2F(197, 443));
+    FT8_start_cmd(VERTEX2F(148, 492));
+    FT8_start_cmd(VERTEX2F(87, 320));
+    FT8_start_cmd(VERTEX2F(156, 320));
+    FT8_start_cmd(VERTEX2F(197, 197));
+    FT8_start_cmd(VERTEX2F(148, 148));
+    FT8_start_cmd(END());
+    //white circle
+    FT8_start_cmd(BEGIN(FT8_POINTS));
+    FT8_start_cmd(POINT_SIZE(121));
+    FT8_start_cmd(VERTEX2F(320, 320));
+    //black circle
+    FT8_start_cmd(POINT_SIZE(89));
+    FT8_cmd_color(0x000000);
+    FT8_start_cmd(VERTEX2F(320, 320));
+    FT8_start_cmd(END());    
     //cleanup
     FT8_start_cmd(RESTORE_CONTEXT());
 }

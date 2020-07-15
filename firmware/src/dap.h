@@ -48,6 +48,7 @@ extern "C" {
     bool dap_shutDown;
     uint16_t dap_volume;
     bool dap_muted;
+    uint8_t dap_loudnessPercent;
     
     bool DAP_WriteBufferCallback(uint8_t subaddress, uint8_t* buffer, uint16_t length, DAP_COMMAND_CALLBACK callback, uintptr_t context, uint32_t callbackDelayMs);
     bool DAP_WriteBuffer(uint8_t subaddress, uint8_t* buffer, uint16_t length);
@@ -62,6 +63,7 @@ extern "C" {
     bool DAP_StartUp(SUCCESS_CALLBACK callback);
     bool DAP_Mute(SUCCESS_CALLBACK callback);
     bool DAP_Unmute(SUCCESS_CALLBACK callback);
+    bool DAP_SetLoudnessComp(uint8_t percent, SUCCESS_CALLBACK callback);
     
     void DAP_Tasks();
     void DAP_IO_Init();
