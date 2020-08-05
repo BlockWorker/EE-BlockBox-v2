@@ -948,6 +948,8 @@ uint32_t  SYS_TIME_CountToUS ( uint32_t count );
 
 uint32_t  SYS_TIME_CountToMS ( uint32_t count );
 
+uint32_t  SYS_TIME_CountToMS64 ( uint64_t count );
+
 
 // *****************************************************************************
 /* Function:
@@ -1021,6 +1023,8 @@ uint32_t SYS_TIME_USToCount ( uint32_t us );
 */
 
 uint32_t SYS_TIME_MSToCount ( uint32_t ms );
+
+uint64_t SYS_TIME_MSToCount64 ( uint32_t ms );
 
 
 // *****************************************************************************

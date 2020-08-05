@@ -37,7 +37,7 @@
 APP_DATA appData;
 
 //batt voltage logging:
-//45750 counts = 15.72v
+//(45750 counts = 15.72v)
 //chg start
 //47800 counts = 16.23v
 //48000 counts = 16.29v
@@ -45,6 +45,22 @@ APP_DATA appData;
 //48600 counts = 16.54v
 //48800 counts = 16.62v
 //48970 counts ~= 16.69v
+//chg end
+//48700 counts loaded = 16.50v
+//48500 counts unloaded = 16.58v
+//47800 counts loaded = 16.24v
+//47600 counts unloaded = 16.31v
+//47600 counts loaded = 16.19v
+//47400 counts unloaded = 16.25v
+//47200 counts loaded = 16.07v
+//47100 counts unloaded = 16.14v
+//46700 counts loaded = 15.90v
+//46600 counts unloaded = 15.97v
+//45900 counts loaded = 15.63v
+//45800 counts unloaded = 15.70v
+//45500 counts loaded = 15.55v
+//45700 counts unloaded = 15.64v
+
 
 #define BATTERY_VOLTAGE_AVG_LENGTH 2048
 uint16_t batteryVoltageCounts[BATTERY_VOLTAGE_AVG_LENGTH] = { 0 };
@@ -55,7 +71,8 @@ uint16_t batteryCurrentCounts[BATTERY_CURR_AVG_LENGTH] = { 0 };
 uint32_t batteryCurrentCountSum = 0;
 uint16_t batteryCurrentCountAverage = 0;
 
-#define BATTERY_VOLTAGE_CONV_FACTOR 3100.0
+#define BATTERY_VOLTAGE_CONV_FACTOR 3274.0
+#define BATTERY_VOLTAGE_OFFSET 1.6
 double batteryVolts = 0.0;
 double batteryPercentRaw = 100.0;
 uint8_t batteryPercent = 100.0;
@@ -144,7 +161,7 @@ void batVoltageADCCallback() {
     arrayPos %= BATTERY_VOLTAGE_AVG_LENGTH;
     
     batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;
-    batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR;
+    batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR + BATTERY_VOLTAGE_OFFSET;
     if (batteryVolts < 11.6 || batteryVolts > 17) batteryDataValid = false;
     
     batteryEnergy = getRemainingBatteryEnergy(batteryVolts, batteryAmps);
@@ -168,23 +185,24 @@ void batCurrentADCCallback() {
     batteryCurrentCountAverage = batteryCurrentCountSum / BATTERY_CURR_AVG_LENGTH;
 }
 
-void readErrorCb(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+/*void readErrorCb(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
     if (success) UART1_Write(buffer, bufferLength);
-}
+}*/
 
-void millisecondCallback(uintptr_t context) {
-    static uint32_t msCount = 0;
+void batteryTickCallback(uintptr_t context) {
+    static uint32_t tickCount = 0;
     
     ADCHS_ChannelConversionStart(ADCHS_CH1);
     ADCHS_ChannelConversionStart(ADCHS_CH2);
     
-    if (msCount % BATTERY_VOLTAGE_AVG_LENGTH == 0) {
+    if (tickCount % BATTERY_VOLTAGE_AVG_LENGTH == 0) {
         batteryUpdated = true;
+        tickCount = 0;
         
-        DAP_Read(0x02, 1, readErrorCb, NULL);
+        //DAP_Read(0x02, 1, readErrorCb, NULL);
     }
     
-    msCount++;
+    tickCount++;
 }
 
 void generalTasks() {
@@ -227,7 +245,7 @@ void init_bm83_callback(bool success) {
     
     if (success) { //success: BM init done
         appData.state = APP_STATE_SERVICE_TASKS;
-        SYS_TIME_CallbackRegisterMS(millisecondCallback, NULL, 1, SYS_TIME_PERIODIC);
+        SYS_TIME_CallbackRegisterMS(batteryTickCallback, NULL, 10, SYS_TIME_PERIODIC);
         //SYS_TIME_CallbackRegisterMS(sendStuff, 0, 1000, SYS_TIME_SINGLE);
     } else if (!bmFailedBefore) { //failed once: try again
         bmFailedBefore = true;
@@ -265,7 +283,7 @@ void init_ui_callback(bool success) {
     
     if (success) { //success: DAP init done, start BM83 init
         appData.state = APP_STATE_INIT_DAP;
-        SYS_TIME_CallbackRegisterMS(millisecondCallback, NULL, 1, SYS_TIME_PERIODIC);
+        SYS_TIME_CallbackRegisterMS(batteryTickCallback, NULL, 1, SYS_TIME_PERIODIC);
         DAP_Chip_Init(init_dap_callback);
     } else if (!uiFailedBefore) { //failed once: try again
         uiFailedBefore = true;

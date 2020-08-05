@@ -280,9 +280,10 @@ void Light_Tasks() {
     }
     
     float periodPos = (tick - light_baseEffect_periodStart) / light_baseEffect_periodLength;
-    while (periodPos >= 1.f) {
+    if (periodPos >= 1.f) {
         light_baseEffect_periodStart = tick;
-        periodPos -= 1.f;
+        float intPart;
+        periodPos = modff(periodPos, &intPart);
     }
     float periodMod = .25f * sinf(2.f * M_PI * periodPos);
     

@@ -18,7 +18,7 @@ extern "C" {
     void ui_drawSpeaker28(uint16_t x, uint16_t y);
     void ui_drawSpeaker40(uint16_t x, uint16_t y, uint32_t bgColor);
     void ui_drawPowerOffButton(uint16_t x, uint16_t y);
-    void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor);
+    void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor, bool rays);
     void ui_drawChain(uint16_t x, uint16_t y, uint32_t bgColor);
     void ui_drawBluetooth(uint16_t x, uint16_t y);
     void ui_drawLightning(uint16_t x, uint16_t y);

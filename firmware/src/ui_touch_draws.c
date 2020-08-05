@@ -224,7 +224,7 @@ void ui_drawPowerOffButton(uint16_t x, uint16_t y) {
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
-void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor) {
+void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor, bool rays) {
     //setup
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(VERTEX_TRANSLATE_X(16 * x));
@@ -245,18 +245,20 @@ void ui_drawBulb(uint16_t x, uint16_t y, uint32_t bgColor) {
     FT8_start_cmd(VERTEX2F(320, 392));
     FT8_start_cmd(VERTEX2F(320, 446));
     //rays
-    FT8_start_cmd(LINE_WIDTH(16));
     FT8_cmd_color(0xffffff);
-    FT8_start_cmd(VERTEX2F(156, 268));
-    FT8_start_cmd(VERTEX2F(105, 241));
-    FT8_start_cmd(VERTEX2F(218, 180));
-    FT8_start_cmd(VERTEX2F(182, 134));
-    FT8_start_cmd(VERTEX2F(320, 150));
-    FT8_start_cmd(VERTEX2F(320, 92));
-    FT8_start_cmd(VERTEX2F(421, 180));
-    FT8_start_cmd(VERTEX2F(457, 134));
-    FT8_start_cmd(VERTEX2F(483, 268));
-    FT8_start_cmd(VERTEX2F(534, 241));
+    if (rays) {
+        FT8_start_cmd(LINE_WIDTH(16));
+        FT8_start_cmd(VERTEX2F(156, 268));
+        FT8_start_cmd(VERTEX2F(105, 241));
+        FT8_start_cmd(VERTEX2F(218, 180));
+        FT8_start_cmd(VERTEX2F(182, 134));
+        FT8_start_cmd(VERTEX2F(320, 150));
+        FT8_start_cmd(VERTEX2F(320, 92));
+        FT8_start_cmd(VERTEX2F(421, 180));
+        FT8_start_cmd(VERTEX2F(457, 134));
+        FT8_start_cmd(VERTEX2F(483, 268));
+        FT8_start_cmd(VERTEX2F(534, 241));
+    }
     FT8_start_cmd(END());
     //socket edge
     FT8_start_cmd(BEGIN(FT8_LINE_STRIP));

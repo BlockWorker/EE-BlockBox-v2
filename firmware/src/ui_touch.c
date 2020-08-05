@@ -54,8 +54,12 @@ static uint32_t ui_touchTickPause;
 
 static bool ui_screenUpdateNeeded = false;
 static bool ui_screenUpdating = false;
+static uint32_t ui_nextScreenUpdateAt;
+static uint32_t ui_screenUpdatePause;
 
 uint32_t ui_themeColor = 0x0040ff;
+
+static uint8_t ui_screenBrightness = 64;
 
 static UI_SETTINGS_TYPE ui_settingsType = UI_NO_SETTINGS;
 
@@ -64,6 +68,19 @@ static uint16_t ui_touchY = 0x8000;
 
 static uint32_t ui_nextIntAt;
 static uint32_t ui_intPause;
+
+static bool ui_screenActive = true;
+static bool ui_screenActivateRequested = false;
+static bool ui_screenDeactivateRequested = false;
+static uint8_t ui_screenFadeBrightness = 64;
+static uint8_t ui_screenFadeStep;
+static uint32_t ui_screenFadeStepTime;
+static uint32_t ui_nextScreenFadeStepAt;
+static uint32_t ui_screenDeactivateAt;
+static uint32_t ui_screenDeactivateDelay;
+
+static uint32_t ui_fadeoutDelays[] = { 495000000U, 990000000U, 1980000000U, 2970000000U, 0U };
+static const char* ui_fadeoutDelayNames[] = { "5 s", "10 s", "20 s", "30 s", "Never" };
 
 static uint16_t ui_minVolume = 0x110; //-50dB
 static uint16_t ui_maxVolume = 0x098; //-20dB
@@ -76,7 +93,8 @@ static uint16_t ui_volumeStep = 0x008; //2dB step
 void ui_touchmatrix_read_callback(bool success, uint32_t data, uintptr_t context) {
     flash_touch_matrix[context] = data;
     if (context >= 5) {
-        //FLASH_Write();
+        FLASH_Write();
+        ui_screenUpdateNeeded = true;
     } else {
         FT8_memRead32(REG_TOUCH_TRANSFORM_B + 4 * context, ui_touchmatrix_read_callback, context + 1);
     }
@@ -95,7 +113,7 @@ void ui_calibrate() {
 }
 
 void ui_writeOrCalibrateTouch() {
-    /*if (flash_touch_matrix[0] == flash_touch_matrix[1] &&
+    if (flash_touch_matrix[0] == flash_touch_matrix[1] &&
         flash_touch_matrix[1] == flash_touch_matrix[2] &&
         flash_touch_matrix[2] == flash_touch_matrix[3] &&
         flash_touch_matrix[3] == flash_touch_matrix[4] &&
@@ -103,8 +121,7 @@ void ui_writeOrCalibrateTouch() {
         ui_calibrate();
     } else {
         FT8_memWriteBuffer(REG_TOUCH_TRANSFORM_A, (uint8_t*)flash_touch_matrix, 24);
-    }*/
-    ui_calibrate();
+    }
 }
 
 /********************/
@@ -123,6 +140,26 @@ char* ui_volToString(uint16_t vol) {
     return res;
 }
 
+void ui_setBrightnessCallback(bool success, uintptr_t context) {
+    if (success) {
+        ui_screenFadeBrightness = (uint8_t)context;
+        if (ui_screenActive) ui_screenBrightness = ui_screenFadeBrightness;
+    }
+}
+
+void ui_setScreenBrightness(uint8_t brightness) {
+    if (brightness == ui_screenFadeBrightness) return;
+    FT8_memWrite8C(REG_PWM_DUTY, brightness, ui_setBrightnessCallback, brightness);
+}
+
+uint8_t ui_getFadeoutDelayIndex(int64_t delay) {
+    int i;
+    for (i = 1; i < 5; i++) {
+        if (ui_screenDeactivateDelay == ui_fadeoutDelays[i]) return i;
+    }
+    return 0;
+}
+
 /****************************/
 /* Screen drawing functions */
 /****************************/
@@ -132,8 +169,8 @@ void ui_drawStatusBar() {
     char percentText[5] = { 0 };
     snprintf(percentText, 5, "%u%%", batteryPercent);
     //uint16_t percentOffset = batteryPercent < 10 ? 20 : batteryPercent < 100 ? 10 : 0;
-    //char voltageText[7] = { 0 };
-    //snprintf(voltageText, 7, "%5.2fV", batteryVolts);
+    char voltageText[7] = { 0 };
+    snprintf(voltageText, 7, "%5.2fV", batteryVolts);
     
     FT8_start_cmd(SAVE_CONTEXT());
     FT8_start_cmd(BEGIN(FT8_RECTS));
@@ -160,7 +197,9 @@ void ui_drawStatusBar() {
     //}
     FT8_start_cmd(END());
     FT8_cmd_color(0xffffff);
-    FT8_cmd_number(120, 2, 27, 0, batteryVoltageCountAverage);
+    //FT8_cmd_number(60, 2, 27, 0, batteryVoltageCountAverage);
+    //FT8_cmd_number(160, 2, 27, 0, batteryCurrentCountAverage);
+    FT8_cmd_text(120, 2, 27, 0, voltageText);
     /*if (batteryDataValid) FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, percentText);
     else*/ FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, "---%");
     //FT8_cmd_text(120, 2, 27, 0, voltageText);
@@ -212,7 +251,7 @@ void ui_drawMainScreen() {
     FT8_cmd_text(68, 216, 26, FT8_OPT_CENTERX, dap_muted ? "Mute" : ui_volToString(dap_volume));
     //remaining icons
     ui_drawBluetooth(133, 191);
-    ui_drawBulb(180, 191, 0x000000);
+    ui_drawBulb(180, 191, 0x000000, light_on);
     ui_drawCog(227, 191);
     ui_drawPowerOffButton(274, 191);
     //touch boxes (invisible)
@@ -288,7 +327,7 @@ void ui_drawSettingsTopBar() {
     FT8_start_cmd(END());
     //sub-op icons
     ui_drawSpeaker40(6, 29, rectX == 12 * 16 ? ui_themeColor : 0x000000);
-    ui_drawBulb(140, 29, rectX == 147 * 16 ? ui_themeColor : 0x000000);
+    ui_drawBulb(140, 29, rectX == 147 * 16 ? ui_themeColor : 0x000000, true);
     ui_drawLightning(185, 29);
     ui_drawChain(230, 29, rectX == 237 * 16 ? ui_themeColor : 0x000000);
     //screen icon border
@@ -414,7 +453,6 @@ void ui_drawFxSettings() {
     FT8_start_cmd(TAG(51)); //loudness slider
     char percentText[5] = { 0 };
     snprintf(percentText, 5, "%u%%", dap_loudnessPercent);
-    //FT8_cmd_toggle(225, 124, 30, 26, 0, dap_loudnessPercent ? 0xffff : 0, "Off\xffOn");
     FT8_cmd_slider(78, 128, 178, 11, 0, dap_loudnessPercent, 100);
     FT8_cmd_track(72, 123, 188, 21, 51);
     FT8_start_cmd(TAG(52)); //bass slider
@@ -437,7 +475,73 @@ void ui_drawFxSettings() {
 void ui_drawDispSettings() {
     ui_drawSettingsTopBar();
     FT8_start_cmd(SAVE_CONTEXT());
-    
+    //sliders
+    FT8_cmd_fgcolor(ui_themeColor);
+    FT8_cmd_bgcolor(0x808080);
+    FT8_cmd_color(0xffffff);
+    FT8_start_cmd(TAG(60)); //disp brightness slider
+    FT8_cmd_slider(66, 88, 190, 11, 0, ui_screenBrightness < 10 ? 0 : ui_screenBrightness - 10, 117);
+    FT8_cmd_track(61, 83, 200, 21, 60);
+    FT8_start_cmd(TAG(61)); //sleep delay slider
+    uint8_t delayIndex = ui_getFadeoutDelayIndex(ui_screenDeactivateDelay);
+    FT8_cmd_slider(66, 125, 190, 11, 0, delayIndex, 4);
+    FT8_cmd_track(61, 122, 200, 21, 61);
+    //text
+    FT8_start_cmd(TAG(0));
+    ui_drawLightIcon(11, 74);
+    FT8_cmd_text(52, 130, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Sleep");
+    FT8_cmd_text(275, 132, 26, FT8_OPT_CENTERY, ui_fadeoutDelayNames[delayIndex]);
+    FT8_cmd_text(112, 166, 27, FT8_OPT_CENTER, "Theme");
+    FT8_cmd_text(274, 166, 27, FT8_OPT_CENTER, "Touch");
+    //button backgrounds
+    FT8_start_cmd(BEGIN(FT8_RECTS));
+    FT8_start_cmd(LINE_WIDTH(64));
+    FT8_start_cmd(VERTEX2F(18 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(50 * 16, 222 * 16));
+    FT8_start_cmd(VERTEX2F(72 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(104 * 16, 222 * 16));
+    FT8_start_cmd(VERTEX2F(126 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(158 * 16, 222 * 16));
+    FT8_start_cmd(VERTEX2F(180 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(212 * 16, 222 * 16));
+    FT8_start_cmd(LINE_WIDTH(96));
+    FT8_start_cmd(VERTEX2F(242 * 16, 192 * 16));
+    FT8_start_cmd(VERTEX2F(308 * 16, 220 * 16));
+    //button contents
+    FT8_start_cmd(LINE_WIDTH(48));
+    FT8_start_cmd(TAG(62)); //blue theme button
+    FT8_cmd_color(UI_THEME_COLOR_BLUE);
+    FT8_start_cmd(VERTEX2F(18 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(50 * 16, 222 * 16));
+    FT8_start_cmd(TAG(63)); //red theme button
+    FT8_cmd_color(UI_THEME_COLOR_RED);
+    FT8_start_cmd(VERTEX2F(72 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(104 * 16, 222 * 16));
+    FT8_start_cmd(TAG(64)); //yellow theme button
+    FT8_cmd_color(UI_THEME_COLOR_YELLOW);
+    FT8_start_cmd(VERTEX2F(126 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(158 * 16, 222 * 16));
+    FT8_start_cmd(TAG(65)); //green theme button
+    FT8_cmd_color(UI_THEME_COLOR_GREEN);
+    FT8_start_cmd(VERTEX2F(180 * 16, 190 * 16));
+    FT8_start_cmd(VERTEX2F(212 * 16, 222 * 16));
+    FT8_start_cmd(TAG(66)); //calibrate button
+    FT8_cmd_color(0x000000);
+    FT8_start_cmd(LINE_WIDTH(64));
+    FT8_start_cmd(VERTEX2F(242 * 16, 192 * 16));
+    FT8_start_cmd(VERTEX2F(308 * 16, 220 * 16));
+    FT8_start_cmd(END());
+    //calibrate text
+    FT8_cmd_color(0xffffff);
+    FT8_cmd_text(275, 206, 27, FT8_OPT_CENTER, "Calibrate");
+    //divider line
+    FT8_start_cmd(TAG(0));
+    FT8_start_cmd(BEGIN(FT8_LINES));
+    FT8_start_cmd(LINE_WIDTH(16));
+    FT8_cmd_color(0x808080);
+    FT8_start_cmd(VERTEX2F(228 * 16, 155 * 16));
+    FT8_start_cmd(VERTEX2F(228 * 16, 230 * 16));
+    FT8_start_cmd(END());
     FT8_start_cmd(RESTORE_CONTEXT());
 }
 
@@ -458,7 +562,7 @@ void ui_drawLightSettings() {
     //text
     FT8_start_cmd(TAG(0));
     FT8_cmd_text(165, 95, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Light");
-    FT8_cmd_text(165, 129, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Sound-to-light");
+    FT8_cmd_text(165, 149, 27, FT8_OPT_CENTERY | FT8_OPT_RIGHTX, "Sound-to-light");
     ui_drawLightIcon(9, 177);
     FT8_start_cmd(RESTORE_CONTEXT());
 }
@@ -506,6 +610,9 @@ void ui_drawScreen() {
                     break;
                 case UI_FX_SETTINGS:
                     ui_drawFxSettings();
+                    break;
+                case UI_DISP_SETTINGS:
+                    ui_drawDispSettings();
                     break;
                 case UI_LIGHT_SETTINGS:
                     ui_drawLightSettings();
@@ -589,6 +696,17 @@ void ui_trackReadCallback(bool success, uint32_t data, uintptr_t context) {
             if (value > 100) value = 100;
             DAP_SetLoudnessComp(value, NULL);
             break;
+        case 60:
+            value = value * 118 / 0xffff;
+            if (value > 117) value = 117;
+            ui_setScreenBrightness(value + 10);
+            break;
+        case 61:
+            value = value * 5 / 0xffff;
+            if (value > 4) value = 4;
+            ui_screenDeactivateDelay = ui_fadeoutDelays[value];
+            ui_screenDeactivateAt = SYS_TIME_CounterGet() + ui_screenDeactivateDelay;
+            break;
         case 72:
             value = value * 101 / 0xffff;
             if (value > 100) value = 100;
@@ -605,9 +723,11 @@ void ui_trackReadCallback(bool success, uint32_t data, uintptr_t context) {
 
 void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
     if (success) {
-        if (!ui_touchReleased) {
-            uint32_t tick = SYS_TIME_CounterGet();
-            
+        uint64_t tick = SYS_TIME_CounterGet();
+        
+        ui_screenDeactivateAt = tick + ui_screenDeactivateDelay;
+        
+        if (!ui_touchReleased) {            
             if (ui_touchedTag != data) {
                 ui_longTouch = false;
                 ui_longTouchTick = false;
@@ -711,6 +831,12 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                     ui_screenUpdateNeeded = true;
                 }
                 break;
+            case 32:
+                if (ui_initialTouch) {
+                    ui_settingsType = UI_DISP_SETTINGS;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
             case 33:
                 if (ui_initialTouch) {
                     ui_settingsType = UI_LIGHT_SETTINGS;
@@ -721,6 +847,35 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
                 if (ui_initialTouch) {
                     ui_settingsType = UI_NO_SETTINGS;
                     ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 62:
+                if (ui_initialTouch) {
+                    ui_themeColor = UI_THEME_COLOR_BLUE;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 63:
+                if (ui_initialTouch) {
+                    ui_themeColor = UI_THEME_COLOR_RED;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 64:
+                if (ui_initialTouch) {
+                    ui_themeColor = UI_THEME_COLOR_YELLOW;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 65:
+                if (ui_initialTouch) {
+                    ui_themeColor = UI_THEME_COLOR_GREEN;
+                    ui_screenUpdateNeeded = true;
+                }
+                break;
+            case 66:
+                if (ui_touchReleased) {
+                    ui_calibrate();
                 }
                 break;
             case 71:
@@ -736,6 +891,8 @@ void ui_tagReadCallback(bool success, uint8_t data, uintptr_t context) {
             case 51:
             case 52:
             case 53:
+            case 60:
+            case 61:
             case 72:
                 if (!ui_touchReleased) {
                     ui_touchLocked = true;
@@ -767,18 +924,25 @@ void ui_touchCoordReadCallback(bool success, uint32_t data, uintptr_t context) {
 void ui_touchReadCallback(bool success, uint32_t data, uintptr_t context) {
     if (!success) return;
     bool newTouched = !(data & 0x80000000);
-    if (newTouched && !ui_touchDown) {
-        FT8_memWrite8(REG_INT_MASK, 0x82);
-        ui_touchDown = true;
-        ui_initialTouch = true;
-        ui_nextTouchTickAt = SYS_TIME_CounterGet() + 3 * ui_touchTickPause;
-    } else if (!newTouched && ui_touchDown) {
-        FT8_memWrite8(REG_INT_MASK, 0x02);
-        ui_touchDown = false;
-        ui_touchReleased = true;
+    if (ui_screenActive) {
+        if (newTouched && !ui_touchDown) {
+            FT8_memWrite8(REG_INT_MASK, 0x82);
+            ui_touchDown = true;
+            ui_initialTouch = true;
+            ui_nextTouchTickAt = SYS_TIME_CounterGet() + 3 * ui_touchTickPause;
+        } else if (!newTouched && ui_touchDown) {
+            FT8_memWrite8(REG_INT_MASK, 0x02);
+            ui_touchDown = false;
+            ui_touchReleased = true;
+        }
+        if (ui_touchDown) FT8_memRead32(REG_TOUCH_TAG_XY, ui_touchCoordReadCallback, NULL);
+        else FT8_memRead8(REG_TOUCH_TAG, ui_tagReadCallback, NULL);
+    } else if (newTouched) {
+        ui_screenActivateRequested = true;
+        ui_screenDeactivateRequested = false;
+        ui_screenFadeStep = ui_screenBrightness / 10 + 1;
+        ui_nextScreenFadeStepAt = SYS_TIME_CounterGet() + ui_screenFadeStepTime;
     }
-    if (ui_touchDown) FT8_memRead32(REG_TOUCH_TAG_XY, ui_touchCoordReadCallback, NULL);
-    else FT8_memRead8(REG_TOUCH_TAG, ui_tagReadCallback, NULL);
 }
 
 void ui_doScreenDraw(bool success) {
@@ -826,15 +990,59 @@ void UI_Tasks() {
         }
     }
     
-    /*if (ui_screenUpdateNeeded && !ui_screenUpdating) {
-        ui_drawScreen();
-        ui_screenUpdateNeeded = false;
-    }*/
+    if (ui_screenActive) {
+        if (ui_screenDeactivateDelay != ui_fadeoutDelays[4] && tick - ui_screenDeactivateAt < UI_TIMEOUT_MAX_DIFF) {
+            ui_screenActive = false;
+            ui_screenActivateRequested = false;
+            ui_screenDeactivateRequested = true;
+            ui_screenFadeStep = ui_screenBrightness / 10 + 1;
+            ui_nextScreenFadeStepAt = tick + ui_screenFadeStepTime;
+            return;
+        }
+        
+        if (batteryUpdated) {
+            ui_screenUpdateNeeded = true;
+            batteryUpdated = false;
+        }
+
+        if (tick - ui_nextScreenUpdateAt < UI_TIMEOUT_MAX_DIFF) {
+            if (ui_screenUpdateNeeded) {
+                ui_nextScreenUpdateAt = tick + ui_screenUpdatePause;
+                ui_drawScreen();
+                ui_screenUpdateNeeded = false;
+            } else {
+                ui_nextScreenUpdateAt = tick;
+            }
+        }
+    } else if (ui_screenActivateRequested && tick - ui_nextScreenFadeStepAt < UI_TIMEOUT_MAX_DIFF) {
+        uint8_t nextBrightness = ui_screenFadeBrightness + ui_screenFadeStep;
+        if (nextBrightness >= ui_screenBrightness) {
+            ui_screenActive = true;
+            ui_screenActivateRequested = false;
+            ui_screenDeactivateRequested = false;
+            ui_screenDeactivateAt = tick + ui_screenDeactivateDelay;
+            ui_screenUpdateNeeded = true;
+            ui_nextScreenUpdateAt = tick + ui_screenUpdatePause;
+            ui_setScreenBrightness(ui_screenBrightness);
+        } else {
+            ui_nextScreenFadeStepAt = tick + ui_screenFadeStepTime;
+            ui_setScreenBrightness(nextBrightness);
+        }
+    } else if (ui_screenDeactivateRequested && tick - ui_nextScreenFadeStepAt < UI_TIMEOUT_MAX_DIFF) {
+        if (ui_screenFadeBrightness <= ui_screenFadeStep) {
+            ui_screenActivateRequested = false;
+            ui_screenDeactivateRequested = false;
+            ui_setScreenBrightness(0);
+        } else {
+            ui_nextScreenFadeStepAt = tick + ui_screenFadeStepTime;
+            ui_setScreenBrightness(ui_screenFadeBrightness - ui_screenFadeStep);
+        }
+    }
 }
 
-void ui_updateScreenLoop(uintptr_t context) {
+/*void ui_updateScreenLoop(uintptr_t context) {
     ui_drawScreen();
-}
+}*/
 
 /****************************/
 /* Initialization functions */
@@ -846,6 +1054,14 @@ void UI_IO_Init() {
     
     ui_intPause = SYS_TIME_MSToCount(50);
     ui_touchTickPause = SYS_TIME_MSToCount(400);
+    ui_screenUpdatePause = SYS_TIME_MSToCount(50);
+    ui_screenFadeStepTime = SYS_TIME_MSToCount(20);
+    
+    ui_fadeoutDelays[0] = SYS_TIME_MSToCount(5000);
+    ui_fadeoutDelays[1] = SYS_TIME_MSToCount(10000);
+    ui_fadeoutDelays[2] = SYS_TIME_MSToCount(20000);
+    ui_fadeoutDelays[3] = SYS_TIME_MSToCount(30000);
+    ui_screenDeactivateDelay = ui_fadeoutDelays[4];
 }
 
 void ui_ftInitCallback(bool success) {
@@ -859,12 +1075,17 @@ void ui_ftInitCallback(bool success) {
     ui_writeOrCalibrateTouch();
     //ui_drawScreen();
     BM83_SetStateChangeCallback(ui_bm83StateChange);
+    
+    uint32_t tick = SYS_TIME_CounterGet();
+    ui_nextIntAt = tick;
+    ui_nextScreenUpdateAt = tick;
+    ui_screenDeactivateDelay = ui_fadeoutDelays[2];
+    ui_screenDeactivateAt = tick + ui_screenDeactivateDelay;
+    
     if (ui_initCallback != NULL) ui_initCallback(true);
     
-    ui_nextIntAt = SYS_TIME_CounterGet();
-    
     SYS_TIME_CallbackRegisterMS(ui_touchSafetyUnlock, 0, 5000, SYS_TIME_PERIODIC);
-    SYS_TIME_CallbackRegisterMS(ui_updateScreenLoop, 0, 100, SYS_TIME_PERIODIC);
+    //SYS_TIME_CallbackRegisterMS(ui_screenDrawFallbackCb, 0, 200, SYS_TIME_PERIODIC);
 }
 
 void UI_Main_Init(SUCCESS_CALLBACK cb) {

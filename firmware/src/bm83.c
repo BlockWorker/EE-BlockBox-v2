@@ -271,10 +271,10 @@ bool bm83_ack_event(BM83_EVENT event) {
 }
 
 bool bm83_request_track_data() {
-    uint8_t params[] = { 0x00, 0x20, 0x00, 0x00, 0x11, 
-                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 
-                         0x00, 0x00, 0x00, 0x01,  0x00, 0x00, 0x00, 0x07 };
-    return BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params, 22);
+    uint8_t params[] = { 0x00, 0x20, 0x00, 0x00, 0x15, 
+                         0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x03, 
+                         0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00, 0x07 };
+    return BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params, 26);
 }
 
 bool bm83_request_caps() {
@@ -287,7 +287,8 @@ void bm83_register_AVC_notifications(uintptr_t context) {
     uint8_t params2[] = { 0x00, 0x31, 0x00, 0x00, 0x05, 0x05, 0x00, 0x00, 0x00, 0x01 };
     BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params1, 10);
     BM83_Queue_Command(BM83_CMD_AVC_Vendor_Dependent_Cmd, params2, 10);*/
-    bm83_request_track_data();
+    //bm83_request_track_data();
+    bm83_request_caps();
 }
 
 bool bm83_init_finish_callback(BM83_COMMAND_RESULT result, uint8_t* response, uint16_t responseLength, uintptr_t context); //predef
@@ -366,7 +367,7 @@ bool bm83_handle_async_event(BM83_EVENT event, uint8_t* buffer, uint16_t length,
                     break;
                 case 0x0B:
                     bm83_avrcp_connected = true;
-                    SYS_TIME_CallbackRegisterMS(bm83_register_AVC_notifications, 0, 500, SYS_TIME_SINGLE);
+                    //SYS_TIME_CallbackRegisterMS(bm83_register_AVC_notifications, 0, 2000, SYS_TIME_SINGLE);
                     break;
                 case 0x0C:
                     bm83_avrcp_connected = false;

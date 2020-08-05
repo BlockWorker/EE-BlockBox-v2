@@ -743,6 +743,7 @@ uint64_t SYS_TIME_Counter64Get ( void )
     if (isSwCounter32Oveflow == true)
     {
         counter64++;
+        counterObj->swCounter64High++;
     }
 
     counter64 = ((counter64 << 32) + counter32);
@@ -792,6 +793,16 @@ uint32_t SYS_TIME_USToCount ( uint32_t us )
 uint32_t SYS_TIME_MSToCount ( uint32_t ms )
 {
     return (uint32_t) (((float) ms * (float) gSystemCounterObj.hwTimerFrequency) / 1000.);
+}
+
+uint64_t SYS_TIME_MSToCount64 ( uint32_t ms )
+{
+    return (uint32_t) (((double) ms * (double) gSystemCounterObj.hwTimerFrequency) / 1000.);
+}
+
+uint32_t  SYS_TIME_CountToMS64 ( uint64_t count )
+{
+    return (uint32_t) ((count * 1000.0) / gSystemCounterObj.hwTimerFrequency);
 }
 
 
