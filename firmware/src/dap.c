@@ -124,6 +124,15 @@ const uint32_t __attribute__((keep)) loudnessO = 0xFF800000; //offset: -1
 
 const uint32_t __attribute__((keep)) speakerPowerOffset = 0x010; //additional -4dB overall
 
+const uint8_t __attribute__((keep)) energyManagerAvgConfig[] = //alpha = 4.17e-5, exponential average over last ~48k samples (.5s)
+{ 0x00, 0x00, 0x01, 0x5E, 0x00, 0x7F, 0xFE, 0xA2, 0x00, 0x00, 0x01, 0x5E, 0x00, 0x7F, 0xFE, 0xA2 }; 
+const uint32_t __attribute__((keep)) energyManagerWeight = 0x00800000; //weighting coefficient: 1
+const uint32_t __attribute__((keep)) energyManagerSubThreshold = 0x00517CC2; //sub threshold: 0dB sine average (~ .637)
+const uint32_t __attribute__((keep)) energyManagerSatThreshold = 0x0028D725; //sat threshold: -6dB sine average (~ .319)
+
+const uint32_t __attribute__((keep)) thdManagerBoost = 0x07FFFFFF; //thd boost: +24.08dB (to engage clip at 0dB input)
+const uint32_t __attribute__((keep)) thdManagerCut = 0x00050C33; //thd cut: -28.08dB (for -4dB output power offset)
+
 static DRV_HANDLE dap_drv;
 
 static uint32_t dap_sendTimeoutTicks; //how many ticks a transfer takes to time out
@@ -135,11 +144,14 @@ bool dap_shutDown = true;
 uint16_t dap_volume = 0x0c0;
 bool dap_muted = true;
 uint8_t dap_loudnessPercent = 0;
+bool dap_overPower = false;
 
 static bool dap_initInProgress = false;
 static SUCCESS_CALLBACK dap_initSuccessCallback = NULL;
 
 static uint32_t dap_sendNextAt;
+static uint32_t dap_nextEnergyIntAt;
+static uint32_t dap_energyIntPause;
 
 /********************/
 /* Helper functions */
@@ -290,8 +302,30 @@ bool DAP_Read(uint8_t subaddress, uint16_t length, DAP_COMMAND_CALLBACK callback
     return true;
 }
 
+void dap_energyCallback(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
+    switch(context) {
+        case 0:
+            if (success && (buffer[1] & 0x0a)) dap_overPower = true;
+            DAP_WriteByteCallback(0x10, 0x00, dap_energyCallback, 1, 0);
+            break;
+        case 1:
+            dap_nextEnergyIntAt = SYS_TIME_CounterGet() + dap_energyIntPause;
+            break;
+    }
+}
+
 void DAP_Tasks() {
     uint32_t tick = SYS_TIME_CounterGet();
+    
+    if (tick - dap_nextEnergyIntAt < I2C_TIMEOUT_MAX_DIFF) {
+        if (!AMP_OTW_N_Get()) {
+            dap_overPower = true;
+            dap_nextEnergyIntAt = tick + dap_sendTimeoutTicks;
+        } else if (DAP_EMO1_Get()) {
+            DAP_Read(0x10, 1, dap_energyCallback, 0);
+            dap_nextEnergyIntAt = tick + dap_sendTimeoutTicks;
+        } else dap_nextEnergyIntAt = tick;
+    }
     
     int i;
     for (i = 0; i < DAP_TASK_LIST_LENGTH; i++) {
@@ -421,6 +455,7 @@ void DAP_IO_Init() {
     
     dap_sendTimeoutTicks = SYS_TIME_MSToCount(1000);
     dap_sendPauseTicks = SYS_TIME_MSToCount(50);
+    dap_energyIntPause = SYS_TIME_MSToCount(200);
 }
 
 void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength, uintptr_t context) {
@@ -463,10 +498,10 @@ void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength,
             sendSuccess = DAP_WriteBufferCallback(0x90, (uint8_t*)bassTrebleBypass, 8, dap_init_cmd_callback, 10, 0); //channel 8 bass/treble inline
             break;
         case 10:
-            sendSuccess = DAP_WriteWordCallback(0xd7, eqHifi_treble_volume + speakerPowerOffset, dap_init_cmd_callback, 11, 70); //channel 7 volume with power offset
+            sendSuccess = DAP_WriteWordCallback(0xd7, eqHifi_treble_volume, dap_init_cmd_callback, 11, 70); //channel 7 volume with power offset
             break;
         case 11:
-            sendSuccess = DAP_WriteWordCallback(0xd8, eqHifi_bass_volume + speakerPowerOffset, dap_init_cmd_callback, 12, 70); //channel 8 volume with power offset
+            sendSuccess = DAP_WriteWordCallback(0xd8, eqHifi_bass_volume, dap_init_cmd_callback, 12, 70); //channel 8 volume with power offset
             break;
         case 12:
             sendSuccess = DAP_WriteBufferCallback(0x95, (uint8_t*)loudnessBiquad, 20, dap_init_cmd_callback, 13, 0); //loudness biquad
@@ -484,12 +519,36 @@ void dap_init_cmd_callback(bool success, uint8_t* buffer, uint16_t bufferLength,
             sendSuccess = DAP_WriteWordCallback(0x94, 0, dap_init_cmd_callback, 17, 0); //loudness offset (initially 0)
             break;
         case 17:
-            sendSuccess = DAP_WriteWordCallback(0xd9, 0x0c0, dap_init_cmd_callback, 18, 70); //master volume (init to -30dB)
+            sendSuccess = DAP_WriteWordCallback(0xe9, thdManagerBoost, dap_init_cmd_callback, 18, 0); //THD manager boost
             break;
         case 18:
-            sendSuccess = DAP_WriteByteCallback(0x03, 0x80, dap_init_cmd_callback, 19, 0); //syscon1: soft unmute from error, enable channels
+            sendSuccess = DAP_WriteWordCallback(0xea, thdManagerCut, dap_init_cmd_callback, 19, 0); //THD manager cut
             break;
-        case 19: //init done
+        case 19:
+            sendSuccess = DAP_WriteBufferCallback(0xb2, (uint8_t*)energyManagerAvgConfig, 16, dap_init_cmd_callback, 20, 0); //energy manager avg filter
+            break;
+        case 20:
+            sendSuccess = DAP_WriteWordCallback(0xb9, energyManagerWeight, dap_init_cmd_callback, 21, 0); //energy manager sat weight
+            break;
+        case 21:
+            sendSuccess = DAP_WriteWordCallback(0xba, energyManagerWeight, dap_init_cmd_callback, 22, 0); //energy manager sub weight
+            break;
+        case 22:
+            sendSuccess = DAP_WriteWordCallback(0xbb, energyManagerSatThreshold, dap_init_cmd_callback, 23, 0); //energy manager sat threshold
+            break;
+        case 23:
+            sendSuccess = DAP_WriteWordCallback(0xbd, energyManagerSubThreshold, dap_init_cmd_callback, 24, 0); //energy manager sub threshold
+            break;
+        case 24:
+            sendSuccess = DAP_WriteByteCallback(0x10, 0x00, dap_init_cmd_callback, 25, 0); //energy manager flags reset
+            break;
+        case 25:
+            sendSuccess = DAP_WriteWordCallback(0xd9, 0x0c0, dap_init_cmd_callback, 26, 70); //master volume (init to -30dB)
+            break;
+        case 26:
+            sendSuccess = DAP_WriteByteCallback(0x03, 0x80, dap_init_cmd_callback, 27, 0); //syscon1: soft unmute from error, enable channels
+            break;
+        case 27: //init done
             dap_initInProgress = false;
             dap_shutDown = false;
             dap_muted = true;
@@ -522,7 +581,7 @@ void dap_init_time_callback(uintptr_t context) {
             break;
         case 3: //reset done: do first writes
             dap_shutDown = false;
-            success = DAP_WriteByteCallback(0x04, 0x02, dap_init_cmd_callback, 1, 0); //syscon2: disable SDOUT
+            success = DAP_WriteByteCallback(0x04, 0x12, dap_init_cmd_callback, 1, 0); //syscon2: disable SDOUT and automute
             if (!success) {
                 dap_initInProgress = false;
                 if (dap_initSuccessCallback != NULL) dap_initSuccessCallback(false);
@@ -536,7 +595,9 @@ void DAP_Chip_Init(SUCCESS_CALLBACK callback) {
     dap_initSuccessCallback = callback;
     
     dap_clearTaskList();
-    dap_sendNextAt = SYS_TIME_CounterGet();
+    uint32_t tick = SYS_TIME_CounterGet();
+    dap_sendNextAt = tick;
+    dap_nextEnergyIntAt = tick + dap_energyIntPause;
     
     DAP_MUTE_N_Clear(); //mute first, start reset after 100ms
     SYS_TIME_CallbackRegisterMS(dap_init_time_callback, 0, 1000, SYS_TIME_SINGLE);

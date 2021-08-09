@@ -1564,7 +1564,8 @@ void ft_initTimerCallback(uintptr_t context) {
             FT8_memRead8(REG_ID, ft_initIDReadCallback, NULL);
             break;
         case 3:
-            FT8_busy(ft_initFinalCallback, NULL);
+            //FT8_busy(ft_initFinalCallback, NULL);
+            ft_initFinalCallback(true, NULL);
             break;
         default:
             break;
@@ -1646,6 +1647,6 @@ void FT8_IO_Init() {
     ft_drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
     DRV_SPI_TransferEventHandlerSet(ft_drv, SPIEventHandler, 0);
     
-    ft_sendPause = SYS_TIME_MSToCount(1);
+    ft_sendPause = SYS_TIME_MSToCount(5);
     ft_sendTimeout = SYS_TIME_MSToCount(1000);
 }

@@ -197,7 +197,7 @@ void ui_drawStatusBar() {
     //}
     FT8_start_cmd(END());
     FT8_cmd_color(0xffffff);
-    //FT8_cmd_number(60, 2, 27, 0, batteryVoltageCountAverage);
+    FT8_cmd_number(40, 2, 27, 0, batteryVoltageCountAverage);
     //FT8_cmd_number(160, 2, 27, 0, batteryCurrentCountAverage);
     FT8_cmd_text(120, 2, 27, 0, voltageText);
     /*if (batteryDataValid) FT8_cmd_text(265, 2, 27, FT8_OPT_RIGHTX, percentText);
@@ -980,6 +980,11 @@ void UI_Tasks() {
     
     uint32_t tick = SYS_TIME_CounterGet();
     
+    if (dap_overPower) {
+        ui_setVol(dap_volume + (ui_volumeStep == 0x00c ? 0x018 : 0x010), ui_doScreenDraw);
+        dap_overPower = false;
+    }
+    
     if (tick - ui_nextIntAt < UI_TIMEOUT_MAX_DIFF) {
         if (!GPIO_PinRead(GPIO_PIN_RC4) && !ui_touchLocked) {
             FT8_memRead8(REG_INT_FLAGS, NULL, NULL);
@@ -1052,9 +1057,9 @@ void UI_IO_Init() {
     FT8_IO_Init();
     //SYS_INT_SourceEnable(INT_SOURCE_EXTERNAL_4);
     
-    ui_intPause = SYS_TIME_MSToCount(50);
+    ui_intPause = SYS_TIME_MSToCount(100);
     ui_touchTickPause = SYS_TIME_MSToCount(400);
-    ui_screenUpdatePause = SYS_TIME_MSToCount(50);
+    ui_screenUpdatePause = SYS_TIME_MSToCount(100);
     ui_screenFadeStepTime = SYS_TIME_MSToCount(20);
     
     ui_fadeoutDelays[0] = SYS_TIME_MSToCount(5000);
