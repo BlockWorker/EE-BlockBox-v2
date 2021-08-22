@@ -63,8 +63,8 @@ APP_DATA appData;
 
 
 #define BATTERY_VOLTAGE_AVG_LENGTH 2048
-uint16_t batteryVoltageCounts[BATTERY_VOLTAGE_AVG_LENGTH] = { 0 };
-uint32_t batteryVoltageCountSum = 0;
+/*uint16_t batteryVoltageCounts[BATTERY_VOLTAGE_AVG_LENGTH] = { 0 };
+uint32_t batteryVoltageCountSum = 0;*/
 uint16_t batteryVoltageCountAverage = 0;
 #define BATTERY_CURR_AVG_LENGTH 2048
 uint16_t batteryCurrentCounts[BATTERY_CURR_AVG_LENGTH] = { 0 };
@@ -151,22 +151,28 @@ double getRemainingBatteryEnergy(double totalVolts, double totalAmps) {
 /**************************/
 
 void batVoltageADCCallback() {
-    static uint16_t arrayPos = 0;
+    //static uint16_t arrayPos = 0;
     
     batteryDataValid = true;
     
-    batteryVoltageCountSum -= batteryVoltageCounts[arrayPos];
+    /*batteryVoltageCountSum -= batteryVoltageCounts[arrayPos];
     batteryVoltageCounts[arrayPos] = ADCFLTR1bits.FLTRDATA;
     batteryVoltageCountSum += batteryVoltageCounts[arrayPos++];
     arrayPos %= BATTERY_VOLTAGE_AVG_LENGTH;
+    batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;*/
     
-    batteryVoltageCountAverage = batteryVoltageCountSum / BATTERY_VOLTAGE_AVG_LENGTH;
+    if (batteryVoltageCountAverage == 0) batteryVoltageCountAverage = ADCFLTR1bits.FLTRDATA;
+    else {
+        double newAvg = 0.9995 * (double)batteryVoltageCountAverage + 0.0005 * (double)ADCFLTR1bits.FLTRDATA;
+        batteryVoltageCountAverage = (uint16_t)newAvg;
+    }
+    
     batteryVolts = batteryVoltageCountAverage / BATTERY_VOLTAGE_CONV_FACTOR + BATTERY_VOLTAGE_OFFSET;
     if (batteryVolts < 11.6 || batteryVolts > 17) batteryDataValid = false;
     
     batteryEnergy = getRemainingBatteryEnergy(batteryVolts, batteryAmps);
     
-    batteryPercentRaw = batteryEnergy / 168.48;
+    batteryPercentRaw = 100.0 * batteryEnergy / 155.0; //more conservative estimate than 168.48;
     if (batteryPercentRaw < 0.0) batteryPercentRaw = 0.0;
     else if (batteryPercentRaw > 100.0) batteryPercentRaw = 100.0;
     
@@ -206,7 +212,8 @@ void batteryTickCallback(uintptr_t context) {
 }
 
 void generalTasks() {
-    GPIO_PinWrite(AMP_RESET_N_PIN, DAP_VALID_Get() && !dap_muted);
+    amp_enabled = DAP_VALID_Get() && !dap_muted;
+    GPIO_PinWrite(AMP_RESET_N_PIN, amp_enabled);
 }
 
 void APP_Tasks() {
@@ -320,6 +327,8 @@ void APP_Initialize() {
     FLASH_Read();
     
     initBatADC();
+    
+    amp_enabled = false;
     
     appData.state = APP_STATE_INIT_UI;
     //BM83_Module_Init(init_bm83_callback);

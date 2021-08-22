@@ -4553,12 +4553,12 @@
         </Comment>
         <Integer dnOrder="1" id="SPI_BAUD_RATE">
           <Values dnOrder="0">
-            <User dnOrder="0" value="100000"/>
+            <User dnOrder="0" value="500000"/>
           </Values>
         </Integer>
         <Integer dnOrder="2" id="SPI_BRG_VALUE">
           <Values dnOrder="0">
-            <Dynamic dnOrder="0" id="spi2" value="494"/>
+            <Dynamic dnOrder="0" id="spi2" value="98"/>
           </Values>
         </Integer>
         <Boolean dnOrder="3" id="SPI_INTERRUPT_MODE">

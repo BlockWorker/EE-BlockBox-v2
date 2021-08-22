@@ -98,6 +98,8 @@ typedef struct
 
 } APP_DATA;
 
+bool amp_enabled;
+
 uint16_t batteryVoltageCountAverage;
 uint16_t batteryCurrentCountAverage;
 double batteryVolts;

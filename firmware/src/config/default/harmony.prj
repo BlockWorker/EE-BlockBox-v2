@@ -203,8 +203,8 @@
           <Name dnOrder="1">plib_spi2.c</Name>
           <LogicalPath dnOrder="2">config/default/peripheral/spi/</LogicalPath>
           <PhysicalPath dnOrder="3">/peripheral/spi/</PhysicalPath>
-          <GeneratedChecksum dnOrder="4">8AF2789CA7670D8DCC84D95F5F8F8893</GeneratedChecksum>
-          <UserChecksum dnOrder="5">8AF2789CA7670D8DCC84D95F5F8F8893</UserChecksum>
+          <GeneratedChecksum dnOrder="4">676176D0A037E0EDDAEA04F725A54088</GeneratedChecksum>
+          <UserChecksum dnOrder="5">676176D0A037E0EDDAEA04F725A54088</UserChecksum>
         </File>
         <File dnOrder="25">
           <Type dnOrder="0">SOURCE</Type>

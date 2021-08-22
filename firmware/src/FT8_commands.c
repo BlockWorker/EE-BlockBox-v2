@@ -1586,7 +1586,7 @@ void ft_initPart2(bool success, uintptr_t context) {
     FT8_memWrite32(FT8_RAM_DL, DL_CLEAR_RGB);
     FT8_memWrite32(FT8_RAM_DL + 4, (DL_CLEAR | CLR_COL | CLR_STN | CLR_TAG));
     FT8_memWrite32(FT8_RAM_DL + 8, DL_DISPLAY); /* end of display list */
-    FT8_memWrite32(REG_DLSWAP, FT8_DLSWAP_FRAME);
+    FT8_memWrite8(REG_DLSWAP, FT8_DLSWAP_FRAME);
 
     /* nothing is being displayed yet... the pixel clock is still 0x00 */
     FT8_memWrite8(REG_GPIO, 0x80); /* enable the DISP signal to the LCD panel, it is set to output in REG_GPIO_DIR by default */
@@ -1647,6 +1647,6 @@ void FT8_IO_Init() {
     ft_drv = DRV_SPI_Open(DRV_SPI_INDEX_0, DRV_IO_INTENT_EXCLUSIVE);
     DRV_SPI_TransferEventHandlerSet(ft_drv, SPIEventHandler, 0);
     
-    ft_sendPause = SYS_TIME_MSToCount(5);
+    ft_sendPause = SYS_TIME_MSToCount(1);
     ft_sendTimeout = SYS_TIME_MSToCount(1000);
 }

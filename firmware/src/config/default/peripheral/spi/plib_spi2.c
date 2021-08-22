@@ -80,7 +80,7 @@ void SPI2_Initialize ( void )
     IFS4CLR = 0x10000;
 
     /* BAUD Rate register Setup */
-    SPI2BRG = 494;
+    SPI2BRG = 98;
 
     /* CLear the Overflow */
     SPI2STATCLR = _SPI2STAT_SPIROV_MASK;
